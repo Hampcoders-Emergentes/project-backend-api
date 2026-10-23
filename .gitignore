@@ -16,6 +16,7 @@ _ReSharper.Caches/
 
 # App settings and config files
 appsettings.Development.json
+.env
 
 # User-specific and temp files
 *.user

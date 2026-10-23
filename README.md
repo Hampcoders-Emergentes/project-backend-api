@@ -28,6 +28,32 @@ principles:
 
 ---
 
+## Configuración local y variables de entorno
+
+Los valores sensibles no deben guardarse en `appsettings.json`. La aplicación acepta variables de entorno con `__` para representar secciones anidadas de configuración de .NET. Por ejemplo:
+
+```bash
+export ConnectionStrings__DefaultConnection='Host=localhost;Port=5433;Username=postgres;Password=tu_password;Database=electrolink2'
+export TokenSettings__Secret='una-clave-local-de-al-menos-32-caracteres'
+export Stripe__SecretKey='sk_test_...'
+export Stripe__WebhookSecret='whsec_...'
+export Cloudinary__ApiKey='...'
+export Cloudinary__ApiSecret='...'
+export Gemini__ApiKey='...'
+export EdgeApi__ApiKey='...'
+dotnet run --project Hampcoders.Electrolink.API.csproj
+```
+
+También puedes copiar [.env.example](./.env.example) como `.env`, completar sus valores y cargarlo antes de iniciar:
+
+```bash
+cp .env.example .env
+set -a; source .env; set +a
+dotnet run --project Hampcoders.Electrolink.API.csproj
+```
+
+`.env` está excluido por `.gitignore`; nunca lo subas a GitHub. En producción, configura estas mismas variables en el proveedor de hosting o en el sistema de secretos correspondiente.
+
 ## 1. Philosophy & Guiding Principles
 
 This structure is based on **[[Domain-Driven Design]]** principles with **[[Bounded Context Pattern]]** implementation. The architecture follows a **[[Layered Architecture]]** approach enhanced with **[[CQRS Pattern]]** for command-query separation. The primary goal is to organize complex business domains into well-defined, loosely coupled contexts that can evolve independently while maintaining clear boundaries and communication protocols.
