@@ -1,3 +1,5 @@
+using Hampcoders.Electrolink.API.Assets.Application.Internal.Authorization;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.ValueObjects;
@@ -10,9 +12,14 @@ namespace Hampcoders.Electrolink.API.Assets.Application.Internal.QueryServices;
 public class IoTDeviceQueryService : IIoTDeviceQueryService
 {
     private readonly IIoTDeviceRepository _deviceRepository;
+    private readonly IPropertyRepository _properties;
+    private readonly IProfilesContextFacade _profiles;
 
-    public IoTDeviceQueryService(IIoTDeviceRepository deviceRepository)
-        => _deviceRepository = deviceRepository;
+    public IoTDeviceQueryService(IIoTDeviceRepository deviceRepository, IPropertyRepository properties, IProfilesContextFacade profiles)
+    { _deviceRepository = deviceRepository; _properties = properties; _profiles = profiles; }
+
+    public Task<IoTDevice?> Handle(GetOwnedIoTDeviceByIdQuery query) =>
+        InventoryDeviceAccess.FindOwned(query.Actor, query.DeviceId, _deviceRepository, _properties, _profiles);
 
     public Task<IoTDevice?> Handle(GetIoTDeviceByIdQuery query)
         => _deviceRepository.FindByIdAsync(IoTDeviceId.From(query.DeviceId));

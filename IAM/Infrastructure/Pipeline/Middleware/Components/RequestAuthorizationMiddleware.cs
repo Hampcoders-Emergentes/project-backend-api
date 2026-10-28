@@ -22,14 +22,16 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
             return;
         }
 
-        // Permitir acceso con X-Api-Key para Edge API
+        // Machine access must be explicit. Human filters/policies still need the loaded user,
+        // even when the request also carries a valid Edge key.
         var apiKey = context.Request.Headers["X-Api-Key"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(apiKey))
+        if (AllowsEdgeApiKey(endpoint) && !string.IsNullOrEmpty(apiKey))
         {
             var config = context.RequestServices.GetRequiredService<IConfiguration>();
             var configuredKey = config["EdgeApi:ApiKey"];
             if (!string.IsNullOrEmpty(configuredKey) && apiKey == configuredKey)
             {
+                context.Features.Set(new EdgeApiKeyAuthenticationFeature());
                 await next(context);
                 return;
             }
@@ -53,8 +55,7 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
             return;
         }
 
-        var getUserByIdQuery = new GetUserByIdQuery(userId);
-        var user = await userQueryService.Handle(getUserByIdQuery);
+        var user = await userQueryService.Handle(new GetUserByIdQuery(userId));
 
         if (user == null)
         {
@@ -68,4 +69,15 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
 
         await next(context);
     }
+
+    private static bool AllowsEdgeApiKey(Endpoint? endpoint)
+    {
+        if (endpoint is null) return false;
+        var metadata = endpoint.Metadata;
+        return metadata.GetMetadata<AllowEdgeApiKeyAttribute>() is not null
+               && metadata.GetMetadata<AuthorizeAttribute>() is null
+               && metadata.GetMetadata<RequireAccessRoleAttribute>() is null
+               && metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>() is null;
+    }
+
 }

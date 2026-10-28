@@ -1,5 +1,4 @@
-using Hampcoders.Electrolink.API.Assets.Domain.Model.Commands;
-using Hampcoders.Electrolink.API.Assets.Domain.Services;
+using Hampcoders.Electrolink.API.Assets.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.Events;
 using MediatR;
 
@@ -8,14 +7,14 @@ namespace Hampcoders.Electrolink.API.Assets.Application.Internal.EventHandlers;
 public class IoTInstallationServiceScheduledEventHandler
     : INotificationHandler<IoTInstallationServiceScheduledExternalEvent>
 {
-    private readonly IIoTDeviceCommandService _deviceCommandService;
+    private readonly IAssetsContextFacade _assetsContextFacade;
     private readonly ILogger<IoTInstallationServiceScheduledEventHandler> _logger;
 
     public IoTInstallationServiceScheduledEventHandler(
-        IIoTDeviceCommandService deviceCommandService,
+        IAssetsContextFacade assetsContextFacade,
         ILogger<IoTInstallationServiceScheduledEventHandler> logger)
     {
-        _deviceCommandService = deviceCommandService;
+        _assetsContextFacade = assetsContextFacade;
         _logger = logger;
     }
 
@@ -28,9 +27,8 @@ public class IoTInstallationServiceScheduledEventHandler
             "Assigning first available IN_STOCK device.",
             notification.PropertyId, notification.InstallationServiceRequestId);
 
-        await _deviceCommandService.Handle(new AssignDeviceToPropertyCommand(
-            DeviceId: notification.SelectedDeviceId,
-            PropertyId: notification.PropertyId,
-            InstallationRequestId: notification.InstallationServiceRequestId));
+        await _assetsContextFacade.AssignAvailableDeviceToPropertyAsync(
+            notification.PropertyId,
+            notification.InstallationServiceRequestId);
     }
 }

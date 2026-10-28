@@ -12,4 +12,5 @@ public interface IIoTDeviceCommandService
     Task<IoTDevice> Handle(SendDeviceToMaintenanceCommand command);
     Task<IoTDevice> Handle(ReinstallDeviceCommand command);
     Task Handle(DecommissionDeviceCommand command);
+    Task Handle(DecommissionOwnedDeviceCommand command);
 }

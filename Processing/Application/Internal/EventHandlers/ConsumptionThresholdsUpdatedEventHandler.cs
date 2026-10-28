@@ -4,6 +4,7 @@ using Hampcoders.Electrolink.API.Processing.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Processing.Domain.Repositories;
 using Hampcoders.Electrolink.API.Processing.Domain.Services;
 using Hampcoders.Electrolink.API.Shared.Domain.Repositories;
+using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using MediatR;
 
 namespace Hampcoders.Electrolink.API.Processing.Application.Internal.EventHandlers;
@@ -40,7 +41,7 @@ public class ConsumptionThresholdsUpdatedEventHandler(
 
         // 2. Also update the demo device stream so the Expo/Wokwi ESP32 picks it up
         var demoStream = await streamRepository.FindByDeviceIdAsync(DemoDeviceId);
-        if (demoStream is not null)
+        if (demoStream is not null && demoStream.Owner == ClientIdentity.FromOwnerId(notification.OwnerId))
         {
             var demoThresholds = ThresholdConfig.Create(
                 nominalVolt, maxConsumpt, maxCurrent, minPF,

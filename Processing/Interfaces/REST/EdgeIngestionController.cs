@@ -8,6 +8,7 @@ using Hampcoders.Electrolink.API.Processing.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Domain.Repositories;
 using Microsoft.AspNetCore.Mvc;
+using Hampcoders.Electrolink.API.StoreManagement.Application;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace Hampcoders.Electrolink.API.Processing.Interfaces.REST;
@@ -27,8 +28,16 @@ public class EdgeIngestionController(
     [SwaggerOperation(Summary = "Receive a sensor reading from the Edge API", OperationId = "IngestReading")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> IngestReading([FromBody] IngestReadingResource resource)
+    public async Task<IActionResult> IngestReading([FromBody] IngestReadingResource resource, [FromServices] EquipmentTelemetryService equipmentTelemetry)
     {
+        try
+        {
+            if (await equipmentTelemetry.TryIngest(resource, HttpContext.RequestAborted)) return NoContent();
+        }
+        catch (EquipmentAccessException e) { return StatusCode(403, new { message = e.Message }); }
+        catch (EquipmentConflictException e) { return Conflict(new { message = e.Message }); }
+        catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
+
         var command = new IngestDeviceReadingCommand(
             resource.DeviceId, resource.ReadingId, resource.Timestamp,
             resource.Voltage, resource.Current, resource.PowerFactor,
@@ -73,8 +82,15 @@ public class EdgeIngestionController(
     [SwaggerOperation(Summary = "Get device thresholds for Edge sync", OperationId = "GetDeviceThresholds")]
     [ProducesResponseType(typeof(DeviceThresholdResource), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetDeviceThresholds(string deviceId)
+    public async Task<IActionResult> GetDeviceThresholds(string deviceId, [FromServices] EquipmentTelemetryService equipmentTelemetry)
     {
+        try
+        {
+            var linked = await equipmentTelemetry.TryThresholds(deviceId, HttpContext.RequestAborted);
+            if (linked != null) return Ok(linked);
+        }
+        catch (EquipmentAccessException e) { return StatusCode(403, new { message = e.Message }); }
+
         var stream = await streamRepository.FindByDeviceIdAsync(deviceId);
 
         // Auto-create a demo stream if one doesn't exist (Expo / Wokwi scenario)

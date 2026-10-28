@@ -1,10 +1,11 @@
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace Hampcoders.Electrolink.API.Processing.Infrastructure.Pipeline.Middleware.Attributes;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
-public class RequireEdgeApiKeyAttribute : Attribute, IAuthorizationFilter
+public class RequireEdgeApiKeyAttribute : AllowEdgeApiKeyAttribute, IAuthorizationFilter
 {
     public void OnAuthorization(AuthorizationFilterContext context)
     {

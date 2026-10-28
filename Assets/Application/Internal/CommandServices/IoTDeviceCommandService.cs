@@ -1,3 +1,5 @@
+using Hampcoders.Electrolink.API.Assets.Application.Internal.Authorization;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Commands;
@@ -16,17 +18,20 @@ public class IoTDeviceCommandService : IIoTDeviceCommandService
     private readonly IPropertyRepository _propertyRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPublisher _publisher;
+    private readonly IProfilesContextFacade _profiles;
 
     public IoTDeviceCommandService(
         IIoTDeviceRepository deviceRepository,
         IPropertyRepository propertyRepository,
         IUnitOfWork unitOfWork,
-        IPublisher publisher)
+        IPublisher publisher,
+        IProfilesContextFacade profiles)
     {
         _deviceRepository = deviceRepository;
         _propertyRepository = propertyRepository;
         _unitOfWork = unitOfWork;
         _publisher = publisher;
+        _profiles = profiles;
     }
 
     public async Task<IoTDevice> Handle(RegisterIoTDeviceCommand command)
@@ -139,6 +144,14 @@ public class IoTDeviceCommandService : IIoTDeviceCommandService
         device.ClearDomainEvents();
 
         return device;
+    }
+
+    public async Task Handle(DecommissionOwnedDeviceCommand command)
+    {
+        var device = await InventoryDeviceAccess.FindOwned(command.Actor, command.DeviceId, _deviceRepository, _propertyRepository, _profiles);
+        if (device == null) throw new DeviceRetirementUnavailableException();
+        // Do not require Installed here: an authorized owner may repeat retirement idempotently.
+        await Handle(new DecommissionDeviceCommand(command.DeviceId, command.Reason));
     }
 
     public async Task Handle(DecommissionDeviceCommand command)

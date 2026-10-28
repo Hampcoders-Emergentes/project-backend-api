@@ -69,6 +69,10 @@ public class OutboxProcessorBackgroundService : BackgroundService
                 message.Error = null;
                 _logger.LogInformation($"Publicado mensaje outbox (MediatR): {integrationEvent.GetType().Name} - {integrationEvent.EventId}");
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Error procesando mensaje outbox ID {message.Id}.");

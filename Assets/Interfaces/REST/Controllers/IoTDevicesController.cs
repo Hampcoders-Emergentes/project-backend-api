@@ -1,3 +1,6 @@
+using Hampcoders.Electrolink.API.Assets.Domain.Model.Exceptions;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
+using HumanAuthorize = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AuthorizeAttribute;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.ValueObjects;
@@ -32,10 +35,11 @@ public class IoTDevicesController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = device.Id.Value }, deviceResource);
     }
 
-    [HttpGet("{id}")]
+    [HttpGet("{id}"), HumanAuthorize]
     public async Task<IActionResult> GetById(string id)
     {
-        var device = await _queryService.Handle(new GetIoTDeviceByIdQuery(id));
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        var device = await _queryService.Handle(new GetOwnedIoTDeviceByIdQuery(actor.Id, id));
         if (device is null) return NotFound();
         var resource = IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device);
         return Ok(resource);
@@ -81,13 +85,19 @@ public class IoTDevicesController : ControllerBase
         return Ok(deviceResource);
     }
 
-    [HttpPut("{id}/install/{propertyId}")]
-    public async Task<IActionResult> RecordInstallation(string id, string propertyId, [FromBody] RecordDeviceInstallationResource resource)
+    [HttpPut("{id}/install/{propertyId}"), HumanAuthorize]
+    public async Task<IActionResult> RecordInstallation(string id, string propertyId, [FromBody] RecordDeviceInstallationResource resource,
+        [FromServices] Hampcoders.Electrolink.API.Assets.Application.Internal.CommandServices.DeviceInstallationService installations)
     {
-        var command = RecordInstallationCommandFromResourceAssembler.ToCommandFromResource(id, propertyId, resource);
-        var device = await _commandService.Handle(command);
-        var deviceResource = IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device);
-        return Ok(deviceResource);
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        try
+        {
+            var device = await installations.Handle(new RecordAssignedDeviceInstallationCommand(actor.Id, id, propertyId,
+                resource.TechnicianId, resource.FirmwareVersion, resource.InstalledAt));
+            return Ok(IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device));
+        }
+        catch (DeviceInstallationUnavailableException) { return NotFound(new { message = "Resource not found." }); }
+        catch (DeviceInstallationStateException) { return Conflict(new { message = "Device is not awaiting installation." }); }
     }
 
     [HttpPut("{id}/connection-status")]
@@ -117,11 +127,16 @@ public class IoTDevicesController : ControllerBase
         return Ok(deviceResource);
     }
 
-    [HttpPost("{id}/decommission")]
+    [HttpPost("{id}/decommission"), HumanAuthorize]
     public async Task<IActionResult> Decommission(string id, [FromBody] DecommissionDeviceResource resource)
     {
-        var command = new DecommissionDeviceCommand(id, resource.Reason);
-        await _commandService.Handle(command);
-        return NoContent();
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        try
+        {
+            await _commandService.Handle(new DecommissionOwnedDeviceCommand(actor.Id, id, resource.Reason));
+            return NoContent();
+        }
+        catch (DeviceRetirementUnavailableException)
+        { return NotFound(new { message = "Resource not found." }); }
     }
 }

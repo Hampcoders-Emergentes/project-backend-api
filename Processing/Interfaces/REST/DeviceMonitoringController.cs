@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Hampcoders.Electrolink.API.Processing.Infrastructure.Pipeline.Middleware.Attributes;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes;
 using Hampcoders.Electrolink.API.Processing.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Processing.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Processing.Domain.Services;
@@ -68,6 +70,8 @@ public class DeviceMonitoringController(
     }
 
     [HttpGet("{deviceId}/relay/history")]
+    [AllowEdgeApiKey]
+    [RequireRelayHistoryDeviceAccess]
     [SwaggerOperation(Summary = "Get relay command history for device", OperationId = "GetRelayHistory")]
     [ProducesResponseType(typeof(RelayCommandHistoryResource), StatusCodes.Status200OK)]
     public async Task<ActionResult<RelayCommandHistoryResource>> GetRelayHistory(string deviceId)

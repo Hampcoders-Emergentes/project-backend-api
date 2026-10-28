@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "snapshotId": "synthetic-m24-v1",
+  "environment": "synthetic",
+  "assets": [
+    { "recordId": "asset-a", "internalId": "dev-internal-a", "serialNumber": "serial-a", "propertyId": "prop-a", "status": "Installed", "evidenceRef": "synthetic:inventory-row-a" },
+    { "recordId": "asset-b", "internalId": "dev-internal-b", "serialNumber": "serial-b", "propertyId": "prop-b", "status": "Installed", "evidenceRef": "synthetic:inventory-row-b" }
+  ],
+  "observations": [
+    { "recordId": "stream-a", "source": "processingStream", "deviceId": "dev-internal-a", "propertyId": "prop-a", "evidenceRef": "synthetic:stream-row-a" },
+    { "recordId": "command-a", "source": "processingRelayCommand", "deviceId": "dev-internal-a", "propertyId": "prop-a", "evidenceRef": "synthetic:command-row-a" },
+    { "recordId": "edge-a", "source": "edgeHistoryRequest", "deviceId": "dev-internal-a", "propertyId": null, "evidenceRef": "synthetic:edge-reading-a" },
+    { "recordId": "edge-b", "source": "edgeHistoryRequest", "deviceId": "serial-b", "propertyId": null, "evidenceRef": "synthetic:edge-reading-b" },
+    { "recordId": "edge-unknown", "source": "edgeHistoryRequest", "deviceId": "dev-unknown", "propertyId": null, "evidenceRef": "synthetic:edge-unknown" },
+    { "recordId": "edge-fallback", "source": "edgeHistoryRequest", "deviceId": "dev-electrolink-esp32-01", "propertyId": null, "evidenceRef": "synthetic:edge-fallback", "isDemo": true }
+  ],
+  "mappings": [
+    { "recordId": "mapping-b", "observedId": "legacy-b", "internalId": "dev-internal-b", "evidenceRef": "synthetic:manual-label-comparison-b" }
+  ]
+}
