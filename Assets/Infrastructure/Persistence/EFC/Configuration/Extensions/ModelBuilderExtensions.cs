@@ -374,10 +374,18 @@ public static class ModelBuilderExtensions
 
         builder.Entity<IoTDevice>()
             .Property(d => d.Status)
+            .IsConcurrencyToken()
             .HasConversion<string>()
             .HasColumnName("status")
             .HasMaxLength(30)
             .IsRequired();
+
+        builder.Entity<IoTDevice>()
+            .Property(d => d.StockTechnicianId)
+            .HasConversion(id => id == null ? null : id.Value, value => value == null ? null : TechnicianId.From(value))
+            .HasColumnName("stock_technician_id")
+            .HasMaxLength(60);
+        builder.Entity<IoTDevice>().HasIndex(d => d.StockTechnicianId);
 
         builder.Entity<IoTDevice>()
             .Property(d => d.AssignedPropertyId)

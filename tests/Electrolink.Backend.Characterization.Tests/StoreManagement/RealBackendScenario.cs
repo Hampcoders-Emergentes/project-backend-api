@@ -48,7 +48,7 @@ internal sealed class RealBackendScenario : IDemoHttpScenario
     internal RetirementEventWitness RetirementEvents { get; } = new();
     internal int AssetMutationEvents { get; private set; }
     internal int ForbiddenCalls { get; private set; }
-    internal RealBackendScenario(string connection, string secret, string edgeKey, string serial, bool machineScope = true, bool includeRetirementHandler = false, bool includeRetirementEndpoint = false, bool observeAssetMutations = false, CompanyCompletionTrace? companyTrace = null, bool includeInstallationHandler = false)
+    internal RealBackendScenario(string connection, string secret, string edgeKey, string serial, bool machineScope = true, bool includeRetirementHandler = false, bool includeRetirementEndpoint = false, bool observeAssetMutations = false, CompanyCompletionTrace? companyTrace = null, bool includeInstallationHandler = false, bool includeAssignmentHandler = false, Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor? saveInterceptor = null)
     {
         this.edgeKey = edgeKey;
         // Call actual module registration extensions without building/running this WebApplicationBuilder.
@@ -66,7 +66,11 @@ internal sealed class RealBackendScenario : IDemoHttpScenario
             {
                 services.AddLogging(l => l.ClearProviders());
                 foreach (var descriptor in moduleServices) services.Add(descriptor);
-                services.AddDbContext<AppDbContext>(o => o.UseNpgsql(connection, pg => pg.UseNetTopologySuite()));
+                services.AddDbContext<AppDbContext>(o =>
+                {
+                    o.UseNpgsql(connection, pg => pg.UseNetTopologySuite());
+                    if (saveInterceptor != null) o.AddInterceptors(saveInterceptor);
+                });
                 services.AddScoped<IUnitOfWork, UnitOfWork>();
                 services.AddScoped<IOrphanedFileRepository, OrphanedFileRepository>();
                 services.AddStoreManagement(connection);
@@ -80,6 +84,9 @@ internal sealed class RealBackendScenario : IDemoHttpScenario
                     Hampcoders.Electrolink.API.IAM.Application.Internal.EventHandlers.UserSignedInEventHandler>();
                 services.AddScoped<INotificationHandler<Hampcoders.Electrolink.API.Profiles.Domain.Model.Events.ProfileCompletedEvent>,
                     Hampcoders.Electrolink.API.Assets.Application.Internal.EventHandlers.ProfileCompletedEventHandler>();
+                if (includeAssignmentHandler)
+                    services.AddScoped<INotificationHandler<Hampcoders.Electrolink.API.Assets.Domain.Model.Events.DeviceAssignedToPropertyEvent>,
+                        Hampcoders.Electrolink.API.Assets.Application.Internal.EventHandlers.DeviceAssignedToPropertyEventHandler>();
                 if (includeInstallationHandler)
                     services.AddScoped<INotificationHandler<Hampcoders.Electrolink.API.Assets.Domain.Model.Events.DeviceInstalledEvent>,
                         Hampcoders.Electrolink.API.Assets.Application.Internal.EventHandlers.DeviceInstalledEventHandler>();

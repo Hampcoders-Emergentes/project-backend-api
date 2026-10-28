@@ -12,6 +12,7 @@ public class IoTDevice : BaseAggregateRoot
     public ApiKeyHash ApiKeyHash { get; private set; } = null!;
     public string FirmwareVersion { get; private set; } = string.Empty;
     public EDeviceStatus Status { get; private set; }
+    public TechnicianId? StockTechnicianId { get; private set; }
     public PropertyId? AssignedPropertyId { get; private set; }
     public InstallationRequestId? InstallationRequestId { get; private set; }
     public TechnicianId? InstalledByTechnicianId { get; private set; }
@@ -46,6 +47,15 @@ public class IoTDevice : BaseAggregateRoot
         device.RaiseDomainEvent(new IoTDeviceRegisteredEvent(
             device.Id.Value, device.SerialNumber.Value, device.FirmwareVersion, DateTime.UtcNow));
 
+        return device;
+    }
+
+    public static IoTDevice RegisterForTechnician(SerialNumber serialNumber, ApiKeyHash apiKeyHash,
+        string firmwareVersion, TechnicianId technicianId)
+    {
+        ArgumentNullException.ThrowIfNull(technicianId);
+        var device = Register(serialNumber, apiKeyHash, firmwareVersion);
+        device.StockTechnicianId = technicianId;
         return device;
     }
 

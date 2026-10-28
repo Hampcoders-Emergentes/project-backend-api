@@ -24,7 +24,7 @@ namespace Electrolink.Backend.Characterization.Tests.StoreManagement;
 
 public static class M313DeviceInstallationDemo
 {
-    public static async Task Run(string manifestPath)
+    public static async Task Run(string manifestPath, bool assignOverHttp = false)
     {
         using var json = JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath)); var m = json.RootElement;
         string Read(string key) => m.GetProperty(key).GetString()!;
@@ -39,7 +39,7 @@ public static class M313DeviceInstallationDemo
             Assert.Equal("electrolink-m33:" + task, await command.ExecuteScalarAsync());
         }
         using var h = new RealBackendScenario(connection, Read("jwtSecret"), Read("edgeKey"), "SYNTHETIC-M313-" + task,
-            machineScope: false, includeRetirementEndpoint: true, observeAssetMutations: true, includeInstallationHandler: true);
+            machineScope: false, includeRetirementEndpoint: true, observeAssetMutations: true, includeInstallationHandler: true, includeAssignmentHandler: assignOverHttp);
         using (var empty = h.Scope())
         {
             var ctx = empty.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -62,7 +62,7 @@ public static class M313DeviceInstallationDemo
         }
         await h.RegisterAndCompleteTechnician("m313-assigned-" + task + "@example.invalid", password, "00000002", other: true);
         await h.RegisterAndCompleteTechnician("m313-unrelated-" + task + "@example.invalid", password, "00000003");
-        string technician, foreignTechnician, deviceId; RequestId requestId; AssignmentId assignmentId; RecipeSnapshot recipe;
+        string technician, foreignTechnician, deviceId; string? spareDeviceId = null; RequestId requestId; AssignmentId assignmentId; RecipeSnapshot recipe;
         using (var seed = h.Scope())
         {
             var sp = seed.ServiceProvider; var profiles = sp.GetRequiredService<IProfilesContextFacade>();
@@ -85,10 +85,14 @@ public static class M313DeviceInstallationDemo
             await sp.GetRequiredService<IServiceRequestRepository>().AddAsync(request);
             await sp.GetRequiredService<IServiceAssignmentRepository>().AddAsync(assignment); await sp.GetRequiredService<IUnitOfWork>().CompleteAsync();
             var commands = sp.GetRequiredService<IIoTDeviceCommandService>();
-            var device = await commands.Handle(new RegisterIoTDeviceCommand("SYNTHETIC-M313-" + task, Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), "synthetic-before"));
+            if (assignOverHttp)
+                spareDeviceId = (await commands.Handle(new RegisterTechnicianIoTDeviceCommand(TechnicianId.From(technician), "SYNTHETIC-M314-SPARE-" + task,
+                    Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), "synthetic-spare"))).Id.Value;
+            var device = await commands.Handle(new RegisterTechnicianIoTDeviceCommand(TechnicianId.From(technician), "SYNTHETIC-M313-" + task, Convert.ToHexString(RandomNumberGenerator.GetBytes(32)), "synthetic-before"));
             deviceId = device.Id.Value;
-            await commands.Handle(new AssignDeviceToPropertyCommand(deviceId, propertyId, request.RequestId.Value));
+            if (!assignOverHttp) await commands.Handle(new AssignDeviceToPropertyCommand(deviceId, propertyId, request.RequestId.Value));
         }
+        if (assignOverHttp) await M314DeviceAssignmentDemo.Check(h, deviceId, spareDeviceId!, propertyId, wrongPropertyId, requestId);
         var path = "/api/v1/io-t-devices/" + deviceId + "/install/" + propertyId;
         var at = DateTime.UtcNow; at = new DateTime(at.Ticks - at.Ticks % TimeSpan.TicksPerMicrosecond, DateTimeKind.Utc);
         object Payload(string tech) => new { technicianId = tech, firmwareVersion = "synthetic-after", installedAt = at };
@@ -137,11 +141,11 @@ public static class M313DeviceInstallationDemo
         Console.WriteLine("PASS M3.13 real IAM/Profiles technicians, persisted request/assignment/property relations, authorized HTTP logical installation, exact legacy DTO and one Assets event");
         Console.WriteLine("PASS M3.13 unrelated active technician, spoofed technician, anonymous/Edge, incompatible/missing resource and reactivated request denied without mutations/events; persisted state from fresh scopes; repeat conflict; no external calls");
     }
-    private static async Task<string> Snapshot(RealBackendScenario h, bool includeDevice = true)
+    internal static async Task<string> Snapshot(RealBackendScenario h, bool includeDevice = true, bool includeProperties = true)
     {
         using var scope = h.Scope(); var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var devices = includeDevice ? JsonSerializer.Serialize(await ctx.IoTDevices.AsNoTracking().OrderBy(d => d.Id).ToListAsync()) : "";
-        var data = new { devices, Properties = await ctx.Set<Hampcoders.Electrolink.API.Assets.Domain.Model.Aggregates.Property>().AsNoTracking().OrderBy(p => p.Id).ToListAsync(),
+        var data = new { devices, Properties = includeProperties ? await ctx.Set<Hampcoders.Electrolink.API.Assets.Domain.Model.Aggregates.Property>().AsNoTracking().OrderBy(p => p.Id).ToListAsync() : null,
             Requests = await ctx.ServiceRequests.AsNoTracking().OrderBy(r => r.RequestId).Select(r => new { r.RequestId, r.Status, r.PropertyId, r.SelectedTechnicianId, r.AssignmentId }).ToListAsync(),
             Assignments = await ctx.ServiceAssignments.AsNoTracking().OrderBy(a => a.AssignmentId).Select(a => new { a.AssignmentId, a.RequestId, a.TechnicianId, a.Status }).ToListAsync(),
             Outbox = await ctx.OutboxMessages.CountAsync(), Streams = await ctx.Set<Hampcoders.Electrolink.API.Processing.Domain.Model.Aggregates.DeviceReadingStream>().CountAsync() };

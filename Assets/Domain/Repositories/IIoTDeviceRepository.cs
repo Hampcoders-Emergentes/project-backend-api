@@ -12,4 +12,7 @@ public interface IIoTDeviceRepository : IBaseRepository<IoTDevice, IoTDeviceId>
     Task<IEnumerable<IoTDevice>> FindByPropertyIdAsync(PropertyId propertyId);
     Task<int> CountActiveByOwnerIdAsync(string ownerId);
     Task<IoTDevice?> FindFirstInStockAsync();
+    Task<Hampcoders.Electrolink.API.Assets.Domain.Model.Queries.TechnicianDeviceStockPage> GetTechnicianStockPageAsync(TechnicianId technician, int page, int pageSize);
+    Task<int> CountTechnicianActiveDevicesAsync(TechnicianId technician);
+    Task<IEnumerable<IoTDevice>> FindTechnicianStockAsync(TechnicianId technician, EDeviceStatus? status = null);
 }

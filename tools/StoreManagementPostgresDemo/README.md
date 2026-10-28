@@ -194,3 +194,50 @@ python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M313_MANIFEST}"
 Un HomeOwner y dos técnicos registrados/completados/autenticados por HTTP real; perfiles y dos inventarios técnicos reales. Propiedades, registro y asignación de dispositivo son precondiciones técnicas con servicios reales. Solicitud Installation y asignación se preparan con fábricas de dominio, repositorios/UoW reales y metadata sintética, sin ejecutar matching/scheduling. El estado Installed nunca se prepara directamente: se obtiene por el PUT protegido. Las instancias owned de ClientIdentity se crean por propietario EF, sin compartir referencia entre agregados.
 
 Verifica técnico asignado 200, otro técnico activo 404, suplantación 404, anónimo/Edge 401, propiedad incompatible/dispositivo inexistente y solicitud reactivada 404, repetición 409. Scopes nuevos verifican persistencia y snapshots antes/después de cada rechazo; un evento Assets por éxito, ninguno por rechazo/repetición. Handler Assets de logging real; Processing/Subscriptions y sus efectos quedan excluidos explícitamente. Streams/outbox en cero; centinelas externos en cero. No acredita hardware, clientes reales, matching automático o aprovisionamiento completo. Manifiestos poblados se conservan detenidos y no se reutilizan. Ver tests/M3.13.md.
+
+
+## M3.14 — asignación por HTTP y continuidad de instalación
+
+Modo opt-in `--assignment-http <manifiesto-nuevo>`. Reutiliza el fixture real de M3.13 mediante opción explícita: registra stock técnicamente, pero reemplaza AssignDeviceToPropertyCommand de preparación por el POST HTTP autorizado. Después ejecuta las comprobaciones de instalación protegida de M3.13 sobre ese dispositivo asignado por API. El modo histórico --installation-http conserva su comportamiento por defecto.
+
+```sh
+set -e
+/private/tmp/electrolink-dotnet9/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
+/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --export-legacy-schema /private/tmp/electrolink-m314-legacy.NUEVO.sql
+# Revisar export antes de preparar; elegir archivo nuevo.
+python3 tools/StoreManagementPostgresDemo/disposable.py prepare --image cbdd40bde138 --legacy-schema /private/tmp/electrolink-m314-legacy.NUEVO.sql
+/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --assignment-http "${M314_MANIFEST:?Manifiesto privado de destino nuevo}"
+python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M314_MANIFEST}"
+```
+
+Tres usuarios/perfiles reales (cliente y dos técnicos), dos propiedades, solicitud/asignación técnica reales y dos dispositivos en stock. Se selecciona uno por ID; el otro conserva InStock sin asignación. Usuario técnico ajeno, anónimo, Edge, solicitud/propiedad incompatibles y dispositivo desconocido no modifican estado ni emiten eventos. Éxito crea relación por HTTP, DTO exacto y evento único; repetición secuencial 409 sin nuevos efectos. Scopes nuevos verifican dispositivo, propiedad, solicitud y stock restante. Un evento de scheduling sin ID falla visiblemente sin tocar inventario. Después se demuestra instalación HTTP y su compatibilidad con rechazos previos.
+
+Precondiciones de registro de stock, propiedades y preparación Planning siguen técnicas. Se ejecutan handlers Assets de logging de asignación/instalación y observador existente; no Processing/Subscriptions, matching, jobs o hardware. Sin concurrencia demostrada: sigue pendiente reserva atómica. No reutilizar destinos poblados; detener conserva datos. No imprimir manifiestos. Ver tests/M3.14.md.
+
+
+## M3.15 — carrera de asignación HTTP
+
+Tras exportar/revisar el DDL offline y preparar un destino nuevo vacío propio con el auxiliar anterior:
+
+```bash
+/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --assignment-race "${M315_MANIFEST:?Manifiesto privado nuevo}"
+python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M315_MANIFEST:?Manifiesto privado propio}"
+```
+
+Compilar primero con la exclusión AppleDouble documentada. No reutilizar un manifiesto ya poblado. Este modo agrega un SaveChangesInterceptor solo al TestServer para que dos contextos lean InStock antes de guardar y para ordenar las confirmaciones, sin sleeps. La preferencia del ganador es coordinación de prueba, no prioridad de negocio. Usa IAM/Profiles, repositorios y transacciones Npgsql reales; verifica 200/409, rollback de propiedad perdedora, un evento, stock sobrante libre y repetición rechazada. No inicia host habitual, workers o comunicaciones. Es una regresión PostgreSQL opt-in independiente de las 228 pruebas xUnit. [Informe, límites y recuperación](../../tests/M3.15.md).
+
+
+## M3.16 — alta y consulta del stock propio del técnico
+
+La política vigente es Technician activo con inventario existente, corregida por el usuario; la propuesta Admin/SuperAdmin fue descartada. Generar y revisar **otro** DDL offline con el modelo actual: incluye stock_technician_id nullable y su índice; no usar el export anterior sin esa columna. Preparar siempre destino nuevo vacío con ese DDL y 001/002/003, sin aplicar borradores a destinos existentes.
+
+```bash
+/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --registration-http "${M316_MANIFEST:?Manifiesto privado nuevo}"
+python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M316_MANIFEST:?Manifiesto privado propio}"
+```
+
+Compilar antes con la exclusión AppleDouble entrecomillada ya documentada. El modo usa tres clientes/técnicos reales IAM/Profiles, inventarios creados por ProfileCompleted, dos cuentas staff preparadas mediante servicio técnico para comprobar rechazo, una propiedad/solicitud/asignación sintéticas persistidas, y un dispositivo técnico legado sin procedencia. El alta de los otros tres dispositivos se realiza por HTTP; dos inserciones del mismo serial compiten tras ambos lookups, coordinadas por interceptor de prueba, con 201/409 y una fila/evento.
+
+Comprueba titular desde actor pese a IDs forjados, lectura propia/Location, conteos y páginas SQL, alias/listados/contador activo propios, rechazo de stock ajeno o NULL en una solicitud por lo demás válida, asignación propia→instalación lógica y disponible 2→1. Admin/SuperAdmin sin perfil técnico, cliente, Edge, anónimo y técnico IAM suspendido rechazados; sin comunicaciones. No verifica aprovisionamiento HTTP de cuentas staff o matching comercial.
+
+Para --assignment-race de M3.15 ahora compiten dos solicitudes del **mismo técnico propietario**, con dos contextos leyendo InStock: conserva 200/409, rollback de propiedad y evento único. El antiguo supuesto de dos titulares distintos sobre stock global quedó sustituido por la corrección expresa del usuario; no se elimina la aserción de exclusión. --assignment-http registra técnicamente dispositivos con propietario explícito de fixture antes de probar HTTP assign/install. [Evidencia vigente](../../tests/M3.16.md).

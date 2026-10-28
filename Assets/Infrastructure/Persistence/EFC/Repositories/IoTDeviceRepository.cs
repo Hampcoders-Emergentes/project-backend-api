@@ -34,4 +34,24 @@ public class IoTDeviceRepository : BaseRepository<IoTDevice, IoTDeviceId>, IIoTD
         => await Context.Set<IoTDevice>()
             .Where(d => d.Status == EDeviceStatus.InStock)
             .FirstOrDefaultAsync();
+
+    public async Task<Hampcoders.Electrolink.API.Assets.Domain.Model.Queries.TechnicianDeviceStockPage> GetTechnicianStockPageAsync(
+        TechnicianId technician, int page, int pageSize)
+    {
+        var own = Context.Set<IoTDevice>().AsNoTracking().Where(d => d.StockTechnicianId == technician);
+        var total = await own.CountAsync();
+        var available = await own.CountAsync(d => d.Status == EDeviceStatus.InStock && d.AssignedPropertyId == null && d.InstallationRequestId == null);
+        var items = await own.OrderBy(d => d.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+        return new(items, total, available);
+    }
+
+    public async Task<IEnumerable<IoTDevice>> FindTechnicianStockAsync(TechnicianId technician, EDeviceStatus? status = null)
+    {
+        var own = Context.Set<IoTDevice>().AsNoTracking().Where(d => d.StockTechnicianId == technician);
+        if (status.HasValue) own = own.Where(d => d.Status == status.Value);
+        return await own.OrderBy(d => d.Id).ToListAsync();
+    }
+    public Task<int> CountTechnicianActiveDevicesAsync(TechnicianId technician) =>
+        Context.Set<IoTDevice>().CountAsync(d => d.StockTechnicianId == technician
+            && (d.Status == EDeviceStatus.Installed || d.Status == EDeviceStatus.Maintenance));
 }

@@ -30,3 +30,22 @@ Archivos: controller/servicio/repositorio AlertManagement, lookup StoreManagemen
 Operación única existente: PUT /api/v1/io-t-devices/{id}/install/{propertyId}. Política Technician activo/asignado confirmada por el usuario; no hereda lectura/baja. Reutilizar comando técnico tras autorización de aplicación y lector ACL de relación Planning. Sin esquema/framework/proveedores nuevos. Aceptación: éxito persistido por HTTP, segundo técnico sin relación, anónimo/Edge, suplantación/recursos incompatibles denegados sin efectos, scope nuevo, DTO y comandos internos conservados.
 
 Completado: RED 7/1; 19/19 focalizadas y 218/218 suite; PostgreSQL real aprobado con precondiciones técnicas explícitas; recursos propios detenidos con datos retenidos. Informe tests/M3.13.md. Recuperación exclusiva /private/tmp/electrolink-m313.patch y backups/snapshot, preservando cambios anteriores. No se inicia otra capacidad.
+
+
+# M3.14 — primer incremento del punto 1
+
+Asignación HTTP protegida y elección explícita de stock, con política material confirmada. Reutilizar identidad Profiles/lector Planning y comandos técnicos tras autorizar. Cambiar solo el puente para exigir selección explícita; no inventar origen persistido o permisos de registro. Aceptación: éxito HTTP/persistencia, ajeno/anónimo/Edge/incompatibles sin efectos, stock secundario intacto, continuidad con instalación M3.13 y contratos conservados.
+
+Completado: base 218/218, RED 9/1, focalizadas 29/29, suite 228/228 y PostgreSQL nuevo pasado/detenido. Sin commits/push. Snapshot/backups/parche exclusivo en /private/tmp/electrolink-m314-*. Punto 1 sigue abierto; siguiente prioridad, reserva atómica de stock antes de acreditar concurrencia; luego alta autorizada y selección persistida.
+
+
+# M3.15 — punto 1: reserva concurrente del mismo stock
+
+Incremento acotado desde M3.14: reproducir dos lecturas InStock mediante interceptor exclusivo de pruebas y dos POST autorizados; reutilizar estado como token de concurrencia sin DDL; 409 para el perdedor, rollback de propiedad y un evento. Completado: RED real 200/200 → GREEN 200/409, focalizadas 29/29, suite 228/228 y compatibilidad PostgreSQL asignación→instalación aprobadas. Recursos propios detenidos. Tests/M3.15.md conserva comandos y recuperación. Alta autorizada y selección persistida no se implementan ni se dan por aprobadas.
+
+
+# M3.16 — stock propio del técnico y publicación autorizada
+
+Política corregida: registrar/consultar dispositivos del técnico IAM/Profiles activo con inventario existente; propietario derivado del servidor, stock previo sin titular excluido sin backfill. Incorporar columna/índice aditivos únicamente en destinos locales nuevos; borrador para revisión futura, sin cambios compartidos. Consulta paginada y cantidades, listados/contador HTTP aislados, asignación solo de stock propio y Location consultable. No alterar cantidades ComponentStock o introducir transferencias/matching automático.
+
+Completado y verificado: 263/263, focalizadas 64/64; PostgreSQL registro→consulta→asignación→instalación, carreras de serial y de asignación, recursos propios detenidos. Preparar commit/push con cambios M3.14/M3.15/M3.16 a develop según petición explícita, excluyendo metadatos/secretos/binarios. tests/M3.16.md registra límites, esquema requerido y recuperación. Selección persistida comercial no se da por terminada.

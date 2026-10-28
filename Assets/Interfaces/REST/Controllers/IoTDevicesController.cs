@@ -1,5 +1,7 @@
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
+using Hampcoders.Electrolink.API.Assets.Application.Internal.CommandServices;
 using HumanAuthorize = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AuthorizeAttribute;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
@@ -26,13 +28,27 @@ public class IoTDevicesController : ControllerBase
         _queryService = queryService;
     }
 
+    // Canonical stock registration route; the legacy POST remains an equally protected compatibility alias.
+    [HttpPost("~/api/v1/iot-devices")]
     [HttpPost]
-    public async Task<IActionResult> RegisterDevice([FromBody] RegisterIoTDeviceResource resource)
+    [HumanAuthorize]
+    public async Task<IActionResult> RegisterDevice([FromBody] RegisterIoTDeviceResource resource, [FromServices] TechnicianDeviceStockService stock)
     {
-        var command = RegisterIoTDeviceCommandFromResourceAssembler.ToCommandFromResource(resource);
-        var device = await _commandService.Handle(command);
-        var deviceResource = IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device);
-        return CreatedAtAction(nameof(GetById), new { id = device.Id.Value }, deviceResource);
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        if (actor.Status != EUserStatus.Active)
+            return StatusCode(StatusCodes.Status403Forbidden);
+        try
+        {
+            var device = await stock.Register(actor.Id, resource.SerialNumber, resource.PlainTextApiKey, resource.FirmwareVersion);
+            var deviceResource = IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device);
+            return CreatedAtAction(nameof(GetStockDevice), new { id = device.Id.Value }, deviceResource);
+        }
+        catch (TechnicianStockAccessDeniedException) { return StatusCode(StatusCodes.Status403Forbidden); }
+        catch (DuplicateAssetException) { return Conflict(new { message = "Device serial number already exists." }); }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation,
+                ConstraintName: "i_x_io_t_devices_serial_number" })
+        { return Conflict(new { message = "Device serial number already exists." }); }
     }
 
     [HttpGet("{id}"), HumanAuthorize]
@@ -45,12 +61,38 @@ public class IoTDevicesController : ControllerBase
         return Ok(resource);
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
+    [HttpGet("~/api/v1/iot-devices/{id}"), HumanAuthorize]
+    public async Task<IActionResult> GetStockDevice(string id, [FromServices] TechnicianDeviceStockService stock)
     {
-        var devices = await _queryService.Handle(new GetAllIoTDevicesQuery());
-        var resources = devices.Select(IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity);
-        return Ok(resources);
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        try
+        {
+            var device = await stock.GetDevice(actor.Id, id);
+            return device is null ? NotFound() : Ok(IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device));
+        }
+        catch (TechnicianStockAccessDeniedException) { return StatusCode(StatusCodes.Status403Forbidden); }
+    }
+
+    [HttpGet("~/api/v1/iot-devices/my-stock"), HumanAuthorize]
+    public async Task<IActionResult> GetMyStock([FromServices] TechnicianDeviceStockService stock, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+    {
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        try
+        {
+            var result = await stock.GetStock(actor.Id, page, pageSize);
+            return Ok(new { items = result.Items.Select(d => new { id = d.Id.Value, serialNumber = d.SerialNumber.Value, d.FirmwareVersion, d.Status }),
+                page, pageSize, result.TotalCount, result.AvailableCount, hasMore = (long)page * pageSize < result.TotalCount });
+        }
+        catch (TechnicianStockAccessDeniedException) { return StatusCode(StatusCodes.Status403Forbidden); }
+        catch (ArgumentOutOfRangeException) { return BadRequest(new { message = "Invalid stock page." }); }
+    }
+
+    [HttpGet, HumanAuthorize]
+    public async Task<IActionResult> GetAll([FromServices] TechnicianDeviceStockService stock)
+    {
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        try { return Ok((await stock.GetLegacyStock(actor.Id)).Select(IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity)); }
+        catch (TechnicianStockAccessDeniedException) { return StatusCode(StatusCodes.Status403Forbidden); }
     }
 
     [HttpGet("by-property/{propertyId}")]
@@ -61,28 +103,42 @@ public class IoTDevicesController : ControllerBase
         return Ok(resources);
     }
 
-    [HttpGet("by-status/{status}")]
-    public async Task<IActionResult> GetByStatus(EDeviceStatus status)
+    [HttpGet("by-status/{status}"), HumanAuthorize]
+    public async Task<IActionResult> GetByStatus(EDeviceStatus status, [FromServices] TechnicianDeviceStockService stock)
     {
-        var devices = await _queryService.Handle(new GetIoTDevicesByStatusQuery(status));
-        var resources = devices.Select(IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity);
-        return Ok(resources);
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        try { return Ok((await stock.GetLegacyStock(actor.Id, status)).Select(IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity)); }
+        catch (TechnicianStockAccessDeniedException) { return StatusCode(StatusCodes.Status403Forbidden); }
     }
 
-    [HttpGet("active-count/{ownerId}")]
-    public async Task<IActionResult> GetActiveDeviceCount(string ownerId)
+    [HttpGet("active-count/{ownerId}"), HumanAuthorize]
+    public async Task<IActionResult> GetActiveDeviceCount(string ownerId, [FromServices] TechnicianDeviceStockService stock)
     {
-        var count = await _queryService.Handle(new GetActiveDeviceCountByOwnerIdQuery(ownerId));
-        return Ok(new ActiveDeviceCountResource(count));
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        try
+        {
+            var count = await stock.GetLegacyActiveCount(actor.Id, ownerId);
+            return count.HasValue ? Ok(new ActiveDeviceCountResource(count.Value)) : NotFound();
+        }
+        catch (TechnicianStockAccessDeniedException) { return StatusCode(StatusCodes.Status403Forbidden); }
     }
 
-    [HttpPost("{id}/assign/{propertyId}")]
-    public async Task<IActionResult> AssignToProperty(string id, string propertyId, [FromBody] AssignDeviceToPropertyResource resource)
+    [HttpPost("{id}/assign/{propertyId}"), HumanAuthorize]
+    public async Task<IActionResult> AssignToProperty(string id, string propertyId, [FromBody] AssignDeviceToPropertyResource resource,
+        [FromServices] Hampcoders.Electrolink.API.Assets.Application.Internal.CommandServices.DeviceAssignmentService assignments)
     {
-        var command = new AssignDeviceToPropertyCommand(id, propertyId, resource.InstallationRequestId);
-        var device = await _commandService.Handle(command);
-        var deviceResource = IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device);
-        return Ok(deviceResource);
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        if (actor.Status != EUserStatus.Active) return NotFound(new { message = "Resource not found." });
+        try
+        {
+            var device = await assignments.Handle(new AssignRequestedDeviceCommand(actor.Id, id, propertyId, resource.InstallationRequestId));
+            return Ok(IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device));
+        }
+        catch (DeviceAssignmentUnavailableException) { return NotFound(new { message = "Resource not found." }); }
+        catch (DeviceAssignmentConflictException) { return Conflict(new { message = "Device is not free stock." }); }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
+            when (ex.Entries.Any(e => e.Entity is Hampcoders.Electrolink.API.Assets.Domain.Model.Aggregates.IoTDevice device && device.Id.Value == id))
+        { return Conflict(new { message = "Device is not free stock." }); }
     }
 
     [HttpPut("{id}/install/{propertyId}"), HumanAuthorize]

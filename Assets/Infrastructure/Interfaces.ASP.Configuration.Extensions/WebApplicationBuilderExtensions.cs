@@ -36,6 +36,8 @@ public static class WebApplicationBuilderExtensions
 
         builder.Services.AddInstallationAssignmentReads();
         builder.Services.AddScoped<DeviceInstallationService>();
+        builder.Services.AddScoped<DeviceAssignmentService>();
+        builder.Services.AddScoped<TechnicianDeviceStockService>();
         builder.Services.AddScoped<IIoTDeviceRepository, IoTDeviceRepository>();
         builder.Services.AddScoped<IIoTDeviceCommandService, IoTDeviceCommandService>();
         builder.Services.AddTransient<IIoTDeviceQueryService, IoTDeviceQueryService>();

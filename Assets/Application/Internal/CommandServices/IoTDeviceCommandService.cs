@@ -34,7 +34,12 @@ public class IoTDeviceCommandService : IIoTDeviceCommandService
         _profiles = profiles;
     }
 
-    public async Task<IoTDevice> Handle(RegisterIoTDeviceCommand command)
+    public Task<IoTDevice> Handle(RegisterIoTDeviceCommand command) => Register(command, null);
+
+    public Task<IoTDevice> Handle(RegisterTechnicianIoTDeviceCommand command) =>
+        Register(new RegisterIoTDeviceCommand(command.SerialNumber, command.PlainTextApiKey, command.FirmwareVersion), command.Technician);
+
+    private async Task<IoTDevice> Register(RegisterIoTDeviceCommand command, TechnicianId? technician)
     {
         var serial = SerialNumber.From(command.SerialNumber);
 
@@ -43,7 +48,8 @@ public class IoTDeviceCommandService : IIoTDeviceCommandService
             throw new DuplicateAssetException("IoTDevice", $"serial number '{command.SerialNumber}'");
 
         var apiKeyHash = ApiKeyHash.CreateFromPlainText(command.PlainTextApiKey);
-        var device = IoTDevice.Register(serial, apiKeyHash, command.FirmwareVersion);
+        var device = technician is null ? IoTDevice.Register(serial, apiKeyHash, command.FirmwareVersion)
+            : IoTDevice.RegisterForTechnician(serial, apiKeyHash, command.FirmwareVersion, technician);
 
         await _deviceRepository.AddAsync(device);
         await _unitOfWork.CompleteAsync();
