@@ -24,4 +24,8 @@ public class SubscriptionProfileResolver(
 
         return await profilesContextFacade.GetProfileFullNameAsync(claims.Value.ProfileId);
     }
+
+    public async Task<string?> ResolveSubscriptionProfileIdAsync(string userId)
+        => await profilesContextFacade.GetProfileClaimsAsync(userId) is { ProfileStatus: "Active" or "Suspended" } claims
+            ? claims.ProfileId : null;
 }

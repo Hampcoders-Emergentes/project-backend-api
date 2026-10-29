@@ -143,9 +143,9 @@ public sealed class PropertyOwnershipTests
 
 internal sealed class PropertyOwnershipFixture : IDisposable
 {
-    internal const string Victim = "ho-victim-m322";
-    internal const string Attacker = "ho-attacker-m322";
-    internal const string Company = "comp-owner-m322";
+    internal const string Victim = OwnerActorDoubles.Victim;
+    internal const string Attacker = OwnerActorDoubles.Attacker;
+    internal const string Company = OwnerActorDoubles.Company;
     internal static readonly object Location = new { geolocation = new { latitude = 1.5, longitude = 2.5, accuracy = (int?)null, source = "MANUAL" } };
     internal static readonly object NewProperty = new
     {
@@ -165,39 +165,7 @@ internal sealed class PropertyOwnershipFixture : IDisposable
 
     internal PropertyOwnershipFixture()
     {
-        User Make(string name, AccessRole role = AccessRole.User) => User.Create(Email.From("m322-" + name + "@example.invalid"), HashedPassword.FromHash("synthetic"), role);
-        var users = new Dictionary<string, User>
-        {
-            ["victim"] = Make("victim"), ["attacker"] = Make("attacker"), ["company"] = Make("company"), ["suspended"] = Make("suspended"),
-            ["no-profile"] = Make("no-profile"), ["inactive-profile"] = Make("inactive"), ["technician"] = Make("technician"),
-            ["subject-mismatch"] = Make("mismatch"), ["admin"] = Make("admin", AccessRole.Admin)
-        };
-        users["suspended"].Suspend("synthetic");
-        // Profile of each user: (status, role, subject). The suspended user keeps a valid, concordant profile of its own.
-        var claims = new Dictionary<string, (string Status, string Role, string Subject)?>
-        {
-            ["victim"] = ("Active", "HomeOwner", Victim), ["attacker"] = ("Active", "HomeOwner", Attacker), ["company"] = ("Active", "Company", Company),
-            ["suspended"] = ("Active", "HomeOwner", "ho-suspended-m322"), ["no-profile"] = null, ["inactive-profile"] = ("Deactivated", "HomeOwner", Victim),
-            ["technician"] = ("Active", "Technician", "tech-m322"), ["subject-mismatch"] = ("Active", "HomeOwner", Victim), ["admin"] = null
-        };
-        var tokens = AssignmentHttpFixture.Proxy<ITokenService>((m, a) =>
-            Task.FromResult(users.TryGetValue((string)a![0]!, out var u) ? u.Id.Value : null));
-        var userQueries = AssignmentHttpFixture.Proxy<IUserQueryService>((m, a) =>
-            a![0] is GetUserByIdQuery q ? Task.FromResult<User?>(users.Values.SingleOrDefault(u => u.Id.Value == q.UserId)) : throw new InvalidOperationException("Unexpected user call"));
-        string? KeyOf(string userId) => users.SingleOrDefault(p => p.Value.Id.Value == userId).Key;
-        var profiles = AssignmentHttpFixture.Proxy<IProfilesContextFacade>((m, a) =>
-        {
-            var arg = (string)a![0]!;
-            return m.Name switch
-            {
-                nameof(IProfilesContextFacade.GetProfileClaimsAsync) => Task.FromResult<(string ProfileId, string ProfileStatus, string? BusinessRole, string? RoleSubjectId, string? SubscriptionTier)?>(
-                    KeyOf(arg) is { } key && claims[key] is { } c ? ("prof-" + key, c.Status, c.Role, c.Subject, null) : null),
-                // The real owner of each subject's profile; "subject-mismatch" claims the victim's subject from another profile.
-                nameof(IProfilesContextFacade.GetProfileIdByHomeownerIdAsync) => Task.FromResult<string?>(arg switch { Victim => "prof-victim", Attacker => "prof-attacker", "ho-suspended-m322" => "prof-suspended", _ => null }),
-                nameof(IProfilesContextFacade.GetProfileIdByCompanyIdAsync) => Task.FromResult<string?>(arg == Company ? "prof-company" : null),
-                _ => throw new InvalidOperationException("Unexpected profile call " + m.Name)
-            };
-        });
+        var actors = new OwnerActorDoubles();
         // Mirrors PropertyRepository: owner-filtered queries filter, FindByIdAsync does not.
         bool Owned(Property p, ClientIdentity o) => p.Owner.ClientType == o.ClientType && p.Owner.ClientId == o.ClientId;
         var all = new List<Property> { VictimProperty, CompanyProperty };
@@ -220,7 +188,7 @@ internal sealed class PropertyOwnershipFixture : IDisposable
         });
         server = new TestServer(new WebHostBuilder().ConfigureServices(services =>
         {
-            services.AddSingleton(tokens); services.AddSingleton(userQueries); services.AddSingleton(profiles);
+            actors.AddTo(services);
             services.AddSingleton<IPropertyCommandService>(new PropertyCommandService(properties, unit, mediator, files, null!));
             services.AddSingleton<IPropertyQueryService>(new PropertyQueryService(properties));
             services.AddControllers(o => o.Conventions.Add(new Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Configuration.KebabCaseRouteNamingConvention()))

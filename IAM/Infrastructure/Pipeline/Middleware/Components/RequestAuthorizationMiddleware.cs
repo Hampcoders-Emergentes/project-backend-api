@@ -1,5 +1,6 @@
 using Hampcoders.Electrolink.API.IAM.Application.Internal.OutboundServices;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Queries;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.IAM.Domain.Services;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes;
 
@@ -61,6 +62,14 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             await context.Response.WriteAsync("Unauthorized: User not found");
+            return;
+        }
+
+        // M3.27: a valid token does not keep a Suspended/PendingVerification account usable.
+        if (user.Status != EUserStatus.Active)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsync("Forbidden: Account is not active");
             return;
         }
 

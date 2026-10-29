@@ -1,7 +1,9 @@
-﻿using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
+﻿using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Subscriptions.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Subscriptions.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Subscriptions.Domain.Services;
+using Hampcoders.Electrolink.API.Subscriptions.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Subscriptions.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Subscriptions.Interfaces.REST.Transform;
 using Microsoft.AspNetCore.Authorization;
@@ -11,16 +13,28 @@ namespace Hampcoders.Electrolink.API.Subscriptions.Interfaces.REST;
 
 [ApiController]
 [Route("api/v1/subscriptions")]
+// M3.31 (user decision): the ProfileId comes from the IAM user through Profiles, never from the JWT claim. Active and
+// Suspended profiles (a failed payment suspends the profile) may use these endpoints; any other actor → 403.
 public class SubscriptionsController(
     ISubscriptionCommandService commandService,
-    ISubscriptionQueryService   queryService) : ControllerBase
+    ISubscriptionQueryService   queryService,
+    ISubscriptionProfileResolver profiles) : ControllerBase
 {
+    private async Task<(string? ProfileId, ActionResult? Denied)> ResolveProfileAsync()
+    {
+        if (HttpContext.Items["User"] is not User actor) return (null, Unauthorized());
+        if (actor.Status != EUserStatus.Active) return (null, StatusCode(StatusCodes.Status403Forbidden));
+        var profileId = await profiles.ResolveSubscriptionProfileIdAsync(actor.Id.Value);
+        return profileId is null ? (null, StatusCode(StatusCodes.Status403Forbidden)) : (profileId, null);
+    }
+
     [HttpGet("me")]
     [Authorize]
     public async Task<IActionResult> GetMySubscription()
     {
-        var profileId   = User.GetProfileId();
-        var subscription = await queryService.Handle(new GetMySubscriptionQuery(profileId));
+        var (profileId, denied) = await ResolveProfileAsync();
+        if (denied is not null) return denied;
+        var subscription = await queryService.Handle(new GetMySubscriptionQuery(profileId!));
         return Ok(MySubscriptionResourceFromEntityAssembler.ToResource(subscription));
     }
 
@@ -28,8 +42,9 @@ public class SubscriptionsController(
     [Authorize]
     public async Task<IActionResult> GetRequestEligibility()
     {
-        var profileId = User.GetProfileId();
-        var result = await queryService.Handle(new GetRequestEligibilityQuery(profileId));
+        var (profileId, denied) = await ResolveProfileAsync();
+        if (denied is not null) return denied;
+        var result = await queryService.Handle(new GetRequestEligibilityQuery(profileId!));
         return Ok(RequestEligibilityResourceFromEntityAssembler.ToResource(result));
     }
 
@@ -43,8 +58,9 @@ public class SubscriptionsController(
         if (pageSize < 1) pageSize = 20;
         if (pageSize > 100) pageSize = 100;
 
-        var profileId = User.GetProfileId();
-        var records = await queryService.Handle(new GetPaymentHistoryQuery(profileId, page, pageSize));
+        var (profileId, denied) = await ResolveProfileAsync();
+        if (denied is not null) return denied;
+        var records = await queryService.Handle(new GetPaymentHistoryQuery(profileId!, page, pageSize));
         return Ok(PaymentHistoryResourceFromEntityAssembler.ToResource(records, page, pageSize));
     }
 
@@ -52,8 +68,9 @@ public class SubscriptionsController(
     [Authorize]
     public async Task<IActionResult> GetStatusAlert()
     {
-        var profileId   = User.GetProfileId();
-        var subscription = await queryService.Handle(new GetSubscriptionStatusAlertQuery(profileId));
+        var (profileId, denied) = await ResolveProfileAsync();
+        if (denied is not null) return denied;
+        var subscription = await queryService.Handle(new GetSubscriptionStatusAlertQuery(profileId!));
 
         if (subscription is null) return NoContent();
 
@@ -64,8 +81,9 @@ public class SubscriptionsController(
     [Authorize]
     public async Task<IActionResult> InitiateCheckout([FromBody] InitiateCheckoutResource resource)
     {
-        var profileId = User.GetProfileId();
-        var command   = InitiateCheckoutCommandFromResourceAssembler.ToCommand(profileId, resource);
+        var (profileId, denied) = await ResolveProfileAsync();
+        if (denied is not null) return denied;
+        var command   = InitiateCheckoutCommandFromResourceAssembler.ToCommand(profileId!, resource);
         var result = await commandService.Handle(command);
         return Ok(new CheckoutUrlResource(result.CheckoutUrl, result.SessionId));
     }
@@ -74,8 +92,9 @@ public class SubscriptionsController(
     [Authorize]
     public async Task<IActionResult> CancelSubscription([FromBody] CancelSubscriptionResource resource)
     {
-        var profileId = User.GetProfileId();
-        var command   = CancelSubscriptionCommandFromResourceAssembler.ToCommand(profileId, resource);
+        var (profileId, denied) = await ResolveProfileAsync();
+        if (denied is not null) return denied;
+        var command   = CancelSubscriptionCommandFromResourceAssembler.ToCommand(profileId!, resource);
         var subscription = await commandService.Handle(command);
         return Ok(MySubscriptionResourceFromEntityAssembler.ToResource(subscription));
     }
@@ -84,8 +103,9 @@ public class SubscriptionsController(
     [Authorize]
     public async Task<IActionResult> OpenCustomerPortal([FromBody] OpenCustomerPortalResource resource)
     {
-        var profileId = User.GetProfileId();
-        var command = new OpenCustomerPortalCommand(profileId, resource.ReturnUrl);
+        var (profileId, denied) = await ResolveProfileAsync();
+        if (denied is not null) return denied;
+        var command = new OpenCustomerPortalCommand(profileId!, resource.ReturnUrl);
         var result = await commandService.Handle(command);
         return Ok(new CustomerPortalUrlResource(result.PortalUrl));
     }

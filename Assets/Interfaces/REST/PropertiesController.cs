@@ -1,11 +1,9 @@
-using Hampcoders.Electrolink.API.Assets.Application.Internal.QueryServices;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Assets.Domain.Services;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
-using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
@@ -18,25 +16,17 @@ namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 [Route("api/v1/companies/{ownerId}/[controller]")]
 [Produces("application/json")]
 [SwaggerTag("Properties Controller Endpoints")]
-// M3.22: the route owner must be the authenticated actor's own HomeOwner/Company subject.
-// Ineligible actor → 403; another owner, a route prefix that does not match the actor's role, or a foreign/missing property → generic 404.
+// M3.22: the route owner must be the authenticated actor's own HomeOwner/Company subject (PropertyOwnerRoute);
+// a foreign or missing property is also a generic 404.
 public class PropertiesController(
     IPropertyCommandService commandService,
     IPropertyQueryService   queryService,
     IProfilesContextFacade  profiles) : ControllerBase
 {
-    private ObjectResult ResourceNotFound() => NotFound(new { message = "Resource not found." });
+    private ObjectResult ResourceNotFound() => PropertyOwnerRoute.NotFound(this);
 
-    private async Task<(ClientIdentity? Owner, ActionResult? Denied)> AuthorizeOwnerAsync(string ownerId)
-    {
-        if (HttpContext.Items["User"] is not User actor) return (null, Unauthorized());
-        var owner = await PropertyOwnerResolver.ResolveAsync(profiles, actor);
-        if (owner is null) return (null, StatusCode(StatusCodes.Status403Forbidden));
-        var routeType = Request.Path.StartsWithSegments("/api/v1/companies", StringComparison.OrdinalIgnoreCase)
-            ? EClientType.Company : EClientType.Homeowner;
-        if (owner.ClientType != routeType || owner.ClientId != ownerId) return (null, ResourceNotFound());
-        return (owner, null);
-    }
+    private Task<(ClientIdentity? Owner, ActionResult? Denied)> AuthorizeOwnerAsync(string ownerId)
+        => PropertyOwnerRoute.AuthorizeAsync(this, profiles, ownerId);
 
     private async Task<bool> OwnsAsync(ClientIdentity owner, string propertyId)
     {

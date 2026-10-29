@@ -1,9 +1,10 @@
 ﻿using System.Net.Mime;
+using Hampcoders.Electrolink.API.Assets.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Assets.Domain.Services;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
-using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
@@ -15,9 +16,12 @@ namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 [Route("api/v1/companies/{ownerId}/[controller]")]
 [Produces(MediaTypeNames.Application.Json)]
 [SwaggerTag("Property Portfolio Endpoints")]
+// M3.23: the route owner must be the authenticated actor's own HomeOwner/Company subject (PropertyOwnerRoute);
+// a property of another owner, or a missing portfolio/property/entry, is a generic 404.
 public class PropertyPortfoliosController(
     IPropertyPortfolioCommandService commandService,
-    IPropertyPortfolioQueryService queryService) : ControllerBase
+    IPropertyPortfolioQueryService queryService,
+    IProfilesContextFacade profiles) : ControllerBase
 {
     /// <summary>Retorna el portfolio del homeowner</summary>
     [HttpGet]
@@ -26,10 +30,10 @@ public class PropertyPortfoliosController(
     [SwaggerResponse(StatusCodes.Status404NotFound, "Portfolio not found")]
     public async Task<IActionResult> GetPortfolio([FromRoute] string ownerId)
     {
-        var query = new GetPortfolioByOwnerIdQuery(CreateIdentity(ownerId));
-        var portfolio = await queryService.Handle(query);
-        if (portfolio is null)
-            return NotFound(new { message = $"Portfolio for owner {ownerId} not found." });
+        var (owner, denied) = await PropertyOwnerRoute.AuthorizeAsync(this, profiles, ownerId);
+        if (denied is not null) return denied;
+        var portfolio = await queryService.Handle(new GetPortfolioByOwnerIdQuery(owner!));
+        if (portfolio is null) return PropertyOwnerRoute.NotFound(this);
 
         return Ok(PropertyPortfolioResourceFromEntityAssembler.ToResourceFromEntity(portfolio));
     }
@@ -44,9 +48,11 @@ public class PropertyPortfoliosController(
         [FromRoute] string ownerId,
         [FromBody] AddPropertyToPortfolioResource resource)
     {
+        var (owner, denied) = await PropertyOwnerRoute.AuthorizeAsync(this, profiles, ownerId);
+        if (denied is not null) return denied;
         try
         {
-            var command = AddPropertyToPortfolioCommandFromResourceAssembler.ToCommandFromResource(resource, ownerId);
+            var command = AddPropertyToPortfolioCommandFromResourceAssembler.ToCommandFromResource(resource, owner!.ClientId);
             var portfolio = await commandService.Handle(command);
             if (portfolio is null) return BadRequest();
             return Ok(PropertyPortfolioResourceFromEntityAssembler.ToResourceFromEntity(portfolio));
@@ -59,10 +65,9 @@ public class PropertyPortfoliosController(
         {
             return Conflict(new { message = ex.Message });
         }
-        catch (UnauthorizedAccessException ex)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
-        }
+        // Another owner's property: indistinguishable from a missing one (was 403 naming the owner).
+        catch (UnauthorizedAccessException) { return PropertyOwnerRoute.NotFound(this); }
+        catch (AssetNotFoundException) { return PropertyOwnerRoute.NotFound(this); }
     }
 
     /// <summary>Elimina una propiedad del portfolio del homeowner</summary>
@@ -75,9 +80,12 @@ public class PropertyPortfoliosController(
         [FromRoute] string propertyId,
         [FromQuery] string reason)
     {
+        var (owner, denied) = await PropertyOwnerRoute.AuthorizeAsync(this, profiles, ownerId);
+        if (denied is not null) return denied;
+        if (!propertyId.StartsWith("prop-", StringComparison.Ordinal)) return PropertyOwnerRoute.NotFound(this);
         try
         {
-            var command = RemovePropertyFromPortfolioCommandFromResourceAssembler.ToCommandFromResource(ownerId, propertyId, reason);
+            var command = RemovePropertyFromPortfolioCommandFromResourceAssembler.ToCommandFromResource(owner!.ClientId, propertyId, reason);
             var result = await commandService.Handle(command);
             return result ? NoContent() : NotFound();
         }
@@ -85,12 +93,6 @@ public class PropertyPortfoliosController(
         {
             return NotFound(new { message = ex.Message });
         }
+        catch (AssetNotFoundException) { return PropertyOwnerRoute.NotFound(this); }
     }
-
-    private static ClientIdentity CreateIdentity(string ownerId)
-        => ownerId.StartsWith("ho-")
-            ? ClientIdentity.FromHomeowner(ownerId)
-            : ownerId.StartsWith("comp-")
-                ? ClientIdentity.FromCompany(ownerId)
-                : throw new InvalidIdException("OwnerId", ownerId);
 }

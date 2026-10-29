@@ -1,4 +1,4 @@
-using Hampcoders.Electrolink.API.IAM.Application.Internal.OutboundServices;
+﻿using Hampcoders.Electrolink.API.IAM.Application.Internal.OutboundServices;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Exceptions;
@@ -45,6 +45,8 @@ public class UserCommandService(
             logger.LogWarning("[IAM BC] Intento de inicio de sesión fallido para {Email}: contraseña inválida.", command.Email);
             throw new InvalidCredentialsException("Invalid username or password");
         }
+        // Checked after the password, so the account status is only revealed with valid credentials (M3.28).
+        if (user.Status != EUserStatus.Active) throw new InactiveAccountException();
         var profileClaims = await externalProfilesService.GetProfileClaimsAsync(user.Id.Value);
 
         var token = tokenService.GenerateToken(user, profileClaims);
@@ -133,6 +135,7 @@ public class UserCommandService(
     public async Task<string> Handle(RefreshClaimsCommand command)
     {
         var user = await userRepository.FindByIdAsync(command.UserId) ?? throw new UserNotFoundException("User not found");
+        if (user.Status != EUserStatus.Active) throw new InactiveAccountException();
 
         var profileClaims = await externalProfilesService.GetProfileClaimsAsync(user.Id.Value);
         return tokenService.GenerateToken(user, profileClaims);

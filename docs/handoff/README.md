@@ -157,3 +157,80 @@ Punto 1 sigue pendiente de selección persistida y coordinación comercial en Pl
   - el middleware IAM sigue sin comprobar `User.Status`;
   - compatibilidad de los clientes web y móvil sin verificar.
 - Ver tests/M3.22.md.
+
+### M3.23 — `PropertyPortfoliosController` vinculado al actor (sin commit)
+
+- Helper compartido `PropertyOwnerRoute`, también usado por `PropertiesController`.
+- Owner ajeno o prefijo cruzado → 404; actor no elegible → 403.
+- Una propiedad ajena al añadirla a un portfolio pasa de 403 (con el owner en el mensaje) a 404 genérico.
+- 351/351 pruebas. PostgreSQL `--portfolio-ownership-http` y `--property-ownership-http` en verde.
+- Incidencias de entorno:
+  - el scratchpad se vació (SDK reinstalado);
+  - Docker perdió todos los contenedores y volúmenes de los ensayos anteriores sin acción de la sesión.
+- Pendiente: los controllers por `{technicianId}`. Ver tests/M3.23.md.
+
+### M3.24 — `TechnicianInventoriesController` vinculado al técnico (sin commit)
+
+- `TechnicianActorResolver` y `TechnicianRoute`: técnico IAM activo y concordante; ruta ajena → 404; no elegible → 403.
+- Errores de dominio que antes daban 500 pasan a 404/409.
+- 372/372 pruebas. PostgreSQL `--inventory-ownership-http` en verde.
+- Pendiente: `ComponentsController` y `ComponentTypesController`, y decidir la pertenencia de componentes y tipos. Ver tests/M3.24.md.
+
+### M3.25 — catálogo de componentes y tipos (sin commit)
+
+- Decisión del usuario: escritura solo para Admin/SuperAdmin activos; lectura para técnicos activos en su ruta y para esos administradores (`ComponentCatalogAccess`).
+- Duplicado o tipo en uso → 409; inexistente → 404 (antes 500).
+- 395/395 pruebas. PostgreSQL `--component-catalog-http` en verde, incluida la mutación real de stock pendiente de M3.24.
+- Pendiente: `ServiceCatalogController`, y comprobar la relación componente↔tipo al añadir stock. Ver tests/M3.25.md.
+
+### M3.26 — `ServiceCatalogController` vinculado al técnico (sin commit)
+
+- Decisión del usuario: catálogo y recetas solo para el propio técnico.
+- El actor se resuelve en el servidor (`ExternalProfilesService.GetActiveTechnicianByUserIdAsync`), sin claims del JWT; `me` funciona en todas las acciones.
+- 408/408 pruebas. PostgreSQL `--service-catalog-http` en verde.
+- Pendiente: el middleware IAM no comprueba `User.Status` de forma global. Ver tests/M3.26.md.
+
+### M3.27 — el middleware IAM rechaza cuentas no activas (sin commit)
+
+- `RequestAuthorizationMiddleware` devuelve 403 `Forbidden: Account is not active` a una cuenta Suspended o PendingVerification con token válido, antes de cualquier endpoint humano.
+- Sin cambios para los endpoints anónimos ni para el canal Edge.
+- 418/418 pruebas. PostgreSQL `--registration-http` (con suspensión real) y `--installation-property-http` en verde.
+- Pendiente:
+  - el inicio de sesión sigue emitiendo tokens a cuentas suspendidas;
+  - no hay endpoint para suspender o reactivar.
+- Ver tests/M3.27.md.
+
+### M3.28 — el inicio de sesión no emite tokens a cuentas no activas (sin commit)
+
+- Con credenciales válidas, una cuenta Suspended o PendingVerification recibe 403 `Account is not active`, sin token ni evento; con una contraseña incorrecta sigue el 401 genérico.
+- `refresh-claims` también da 403.
+- 424/424 pruebas. PostgreSQL `--inactive-sign-in-http` y `--registration-http` en verde.
+- Ver tests/M3.28.md.
+
+### M3.29 — `ServiceRequestController` sin claims del JWT (sin commit)
+
+- El cliente se resuelve con IAM y Profiles (HomeOwner o Company activo y concordante). Sin perfil elegible → 403; solicitud ajena, inexistente o mal formada → 404 (antes 500).
+- `available-services` exige ser el titular.
+- Un token con el perfil suspendido después de emitirse recibe 403 (PostgreSQL).
+- 434/434 pruebas.
+- Pendiente: `ServiceSuggestionController`, `SubscriptionsController` y Monitoring siguen usando claims. Ver tests/M3.29.md.
+
+### Estado Git (verificado al cerrar M3.29)
+
+- Una operación externa a la sesión (reflog, 2026-10-29 15:54:42) reescribió M3.17 como `4cb6d50` y publicó `f31bf28` (M3.18–M3.22) en `origin/develop`.
+- M3.23–M3.29 siguen sin commit encima de `f31bf28`; las bases «29d0d13» de los informes M3.23–M3.28 deben leerse como `f31bf28`.
+- Detalle en tests/M3.29.md.
+
+### M3.30 — `ServiceSuggestionController` sin claims del JWT (sin commit)
+
+- Cliente resuelto con IAM y Profiles. Sugerencia ajena o inexistente → 404 genérico (antes 403 o 500); conflicto de estado → 409.
+- 447/447 pruebas. PostgreSQL `--service-suggestion-http` en verde.
+- Anotado: aceptar una sugerencia crea la solicitud sin elegibilidad ni cupo.
+- Pendiente: `SubscriptionsController` y Monitoring. Ver tests/M3.30.md.
+
+### M3.31 — `SubscriptionsController` sin claims del JWT (sin commit)
+
+- Decisión del usuario: perfiles Active y Suspended (pago fallido) pueden usar la suscripción; el resto → 403. El `ProfileId` se resuelve con IAM y Profiles.
+- Corregido un defecto: `me/cancel` y `me/portal` daban 500 siempre, por `[property: Required]` en *records*.
+- 456/456 pruebas. PostgreSQL `--subscription-profile-http` en verde.
+- Pendiente: Monitoring. Ver tests/M3.31.md.

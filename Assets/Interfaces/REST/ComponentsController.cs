@@ -1,8 +1,10 @@
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Commands;
+using Hampcoders.Electrolink.API.Assets.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Assets.Domain.Services;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
@@ -15,9 +17,11 @@ namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 [ApiController]
 [Route("api/v1/technicians/{technicianId}/[controller]")]
 [SwaggerTag("Components Management")]
+// M3.25: global catalogue; see ComponentCatalogAccess for the read/write policy.
 public class ComponentsController(
     IComponentCommandService componentCommandService,
-    IComponentQueryService componentQueryService) : ControllerBase
+    IComponentQueryService componentQueryService,
+    IProfilesContextFacade profiles) : ControllerBase
 {
     [HttpPost]
     [SwaggerOperation(Summary = "Create Component", OperationId = "CreateComponent")]
@@ -27,11 +31,16 @@ public class ComponentsController(
         [FromRoute] string technicianId,  
         [FromBody] CreateComponentResource resource)
     {
-        var command = CreateComponentCommandFromResourceAssembler.ToCommandFromResource(resource);
-        var component = await componentCommandService.Handle(command);
-        if (component is null) return BadRequest();
+        if (ComponentCatalogAccess.AuthorizeWrite(this) is { } denied) return denied;
+        try
+        {
+            var command = CreateComponentCommandFromResourceAssembler.ToCommandFromResource(resource);
+            var component = await componentCommandService.Handle(command);
+            if (component is null) return BadRequest();
 
-        return Ok(ComponentResourceFromEntityAssembler.ToResourceFromEntity(component));
+            return Ok(ComponentResourceFromEntityAssembler.ToResourceFromEntity(component));
+        }
+        catch (DuplicateAssetException ex) { return Conflict(new { message = ex.Message }); }
     }
 
     [HttpGet("{componentId}", Name = nameof(GetComponentById))]
@@ -42,6 +51,8 @@ public class ComponentsController(
         [FromRoute] string technicianId,   
         [FromRoute] string componentId)
     {
+        var denied = await ComponentCatalogAccess.AuthorizeReadAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
         var query = new GetComponentByIdQuery(ComponentId.From(componentId));
         var component = await componentQueryService.Handle(query);
         if (component is null) return NotFound();
@@ -54,6 +65,8 @@ public class ComponentsController(
     [SwaggerResponse(StatusCodes.Status200OK, "List of components retrieved", typeof(IEnumerable<ComponentResource>))]
     public async Task<IActionResult> GetAllComponents([FromRoute] string technicianId)  
     {
+        var denied = await ComponentCatalogAccess.AuthorizeReadAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
         var query = new GetAllComponentsQuery();
         var components = await componentQueryService.Handle(query);
         var resources = components.Select(ComponentResourceFromEntityAssembler.ToResourceFromEntity);
@@ -69,11 +82,16 @@ public class ComponentsController(
         [FromRoute] string componentId,
         [FromBody] UpdateComponentResource resource)
     {
-        var command = UpdateComponentCommandFromResourceAssembler.ToCommandFromResource(resource, componentId);
-        var component = await componentCommandService.Handle(command);
-        if (component is null) return NotFound("Component not found");
+        if (ComponentCatalogAccess.AuthorizeWrite(this) is { } denied) return denied;
+        try
+        {
+            var command = UpdateComponentCommandFromResourceAssembler.ToCommandFromResource(resource, componentId);
+            var component = await componentCommandService.Handle(command);
+            if (component is null) return NotFound("Component not found");
 
-        return Ok(ComponentResourceFromEntityAssembler.ToResourceFromEntity(component));
+            return Ok(ComponentResourceFromEntityAssembler.ToResourceFromEntity(component));
+        }
+        catch (AssetNotFoundException) { return NotFound("Component not found"); }
     }
 
     [HttpDelete("{componentId}")]
@@ -84,6 +102,7 @@ public class ComponentsController(
         [FromRoute] string technicianId,   
         [FromRoute] string componentId)
     {
+        if (ComponentCatalogAccess.AuthorizeWrite(this) is { } denied) return denied;
         var command = new DeleteComponentCommand(ComponentId.From(componentId));
         var result = await componentCommandService.Handle(command);
         if (!result) return NotFound("Component not found");

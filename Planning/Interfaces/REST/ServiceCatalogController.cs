@@ -1,4 +1,7 @@
-﻿using Hampcoders.Electrolink.API.Planning.Domain.Model.Commands;
+﻿using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
+using Hampcoders.Electrolink.API.Planning.Application.Internal.OutboundServices;
+using Hampcoders.Electrolink.API.Planning.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.ValueObjects;
@@ -6,7 +9,6 @@ using Hampcoders.Electrolink.API.Planning.Domain.Services;
 using Hampcoders.Electrolink.API.Planning.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Planning.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
-using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Hampcoders.Electrolink.API.Planning.Interfaces.REST;
@@ -14,25 +16,34 @@ namespace Hampcoders.Electrolink.API.Planning.Interfaces.REST;
 [ApiController]
 [Route("api/v1/technicians/{technicianId}/catalog")]
 [Produces("application/json")]
+// M3.26 (user decision): the catalog is read and written only by its technician. The actor is the IAM user loaded by the
+// middleware, resolved server-side through Profiles (no JWT claims); "me" or the actor's own id. Ineligible → 403, other technician → 404.
 public class ServiceCatalogController(
     IServiceCatalogCommandService commandService,
-    IServiceDesignQueryService queryService)
+    IServiceDesignQueryService queryService,
+    ExternalProfilesService profiles)
     : ControllerBase
 {
-    private string ResolveTechnicianId(string technicianId)
+    private ObjectResult ResourceNotFound() => NotFound(new { message = "Resource not found." });
+
+    private async Task<(TechnicianId? Technician, ProfileId? Profile, ActionResult? Denied)> AuthorizeAsync(string technicianId)
     {
-        if (technicianId == "me")
-            return User.GetTechnicianId();
-        return technicianId;
+        if (HttpContext.Items["User"] is not User actor) return (null, null, Unauthorized());
+        if (actor.Status != EUserStatus.Active) return (null, null, StatusCode(StatusCodes.Status403Forbidden));
+        if (await profiles.GetActiveTechnicianByUserIdAsync(actor.Id.Value) is not { } own) return (null, null, StatusCode(StatusCodes.Status403Forbidden));
+        if (technicianId != "me" && technicianId != own.TechnicianId) return (null, null, ResourceNotFound());
+        return (TechnicianId.From(own.TechnicianId), ProfileId.From(own.ProfileId), null);
     }
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateCatalog([FromRoute] string technicianId)
     {
+        var (technician, profile, denied) = await AuthorizeAsync(technicianId);
+        if (denied is not null) return denied;
         try
         {
-            var command = new CreateServiceCatalogCommand(TechnicianId.From(ResolveTechnicianId(technicianId)), ProfileId.From(User.GetProfileId()));
+            var command = new CreateServiceCatalogCommand(technician!, profile!);
             await commandService.Handle(command);
             
             return StatusCode(StatusCodes.Status201Created);
@@ -49,7 +60,9 @@ public class ServiceCatalogController(
     public async Task<ActionResult<ServiceCatalogResource>> GetCatalog(
         [FromRoute] string technicianId)
     {
-        var catalog = await queryService.Handle(new GetServiceCatalogQuery(TechnicianId.From(ResolveTechnicianId(technicianId))));
+        var (technician, _, denied) = await AuthorizeAsync(technicianId);
+        if (denied is not null) return denied;
+        var catalog = await queryService.Handle(new GetServiceCatalogQuery(technician!));
         if (catalog is null) return NotFound(new { message = "Catalog not found" });
         return Ok(ServiceCatalogResourceFromEntityAssembler.ToResource(catalog));
     }
@@ -60,22 +73,24 @@ public class ServiceCatalogController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateRecipe(
+        [FromRoute] string technicianId,
         [FromBody]  CreateServiceRecipeResource resource)
     {
+        var (technician, _, denied) = await AuthorizeAsync(technicianId);
+        if (denied is not null) return denied;
         try
         {
-            var technicianId = User.GetTechnicianId();
-            var catalog = await queryService.Handle(new GetServiceCatalogQuery(TechnicianId.From(technicianId)));
+            var catalog = await queryService.Handle(new GetServiceCatalogQuery(technician!));
             if (catalog is null) return NotFound(new { message = "Catalog not found" });
 
             var command = CreateServiceRecipeCommandFromResourceAssembler
-                .ToCommand(resource, catalog.CatalogId.Value, technicianId);
+                .ToCommand(resource, catalog.CatalogId.Value, technician!.Value);
 
             var recipe = await commandService.Handle(command);
             if (recipe is null) return BadRequest();
             return CreatedAtAction(
                 nameof(GetRecipeDetails),
-                new { technicianId, recipeId = recipe.Id.Value },
+                new { technicianId = technician!.Value, recipeId = recipe.Id.Value },
                 new { recipeId = recipe.Id.Value });
         }
         catch (DuplicateRecipeNameException ex) { return Conflict(new { message = ex.Message }); }
@@ -89,7 +104,9 @@ public class ServiceCatalogController(
         [FromRoute] string technicianId,
         [FromRoute] string recipeId)
     {
-        var catalog = await queryService.Handle(new GetServiceCatalogQuery(TechnicianId.From(ResolveTechnicianId(technicianId))));
+        var (technician, _, denied) = await AuthorizeAsync(technicianId);
+        if (denied is not null) return denied;
+        var catalog = await queryService.Handle(new GetServiceCatalogQuery(technician!));
         if (catalog is null) return NotFound(new { message = "Catalog not found" });
 
         var recipe = catalog.Recipes.FirstOrDefault(r => r.Id.Value == recipeId);
@@ -107,16 +124,18 @@ public class ServiceCatalogController(
         [FromRoute] string recipeId,
         [FromBody]  UpdateServiceRecipeResource resource)
     {
+        var (technician, _, denied) = await AuthorizeAsync(technicianId);
+        if (denied is not null) return denied;
         try
         {
-            var catalog = await queryService.Handle(new GetServiceCatalogQuery(TechnicianId.From(ResolveTechnicianId(technicianId))));
+            var catalog = await queryService.Handle(new GetServiceCatalogQuery(technician!));
             if (catalog is null) return NotFound(new { message = "Catalog not found" });
 
             var command = UpdateServiceRecipeCommandFromResourceAssembler.ToCommandFromResource(
                 resource, 
                 recipeId, 
                 catalog.CatalogId.Value, 
-                technicianId);
+                technician!.Value);
             
             await commandService.Handle(command);
             return NoContent();
@@ -135,15 +154,17 @@ public class ServiceCatalogController(
         [FromRoute] string recipeId,
         [FromBody]  DeactivateServiceRecipeResource resource)
     {
+        var (technician, _, denied) = await AuthorizeAsync(technicianId);
+        if (denied is not null) return denied;
         try
         {
-            var catalog = await queryService.Handle(new GetServiceCatalogQuery(TechnicianId.From(ResolveTechnicianId(technicianId))));
+            var catalog = await queryService.Handle(new GetServiceCatalogQuery(technician!));
             if (catalog is null) return NotFound(new { message = "Catalog not found" });
 
             await commandService.Handle(new DeactivateServiceRecipeCommand(
                 catalog.CatalogId, 
                 RecipeId.From(recipeId), 
-                TechnicianId.From(technicianId), 
+                technician!, 
                 resource.Reason, 
                 resource.Notes));
             
@@ -160,15 +181,17 @@ public class ServiceCatalogController(
         [FromRoute] string technicianId,
         [FromRoute] string recipeId)
     {
+        var (technician, _, denied) = await AuthorizeAsync(technicianId);
+        if (denied is not null) return denied;
         try
         {
-            var catalog = await queryService.Handle(new GetServiceCatalogQuery(TechnicianId.From(ResolveTechnicianId(technicianId))));
+            var catalog = await queryService.Handle(new GetServiceCatalogQuery(technician!));
             if (catalog is null) return NotFound(new { message = "Catalog not found" });
 
             await commandService.Handle(new ReactivateServiceRecipeCommand(
                 catalog.CatalogId, 
                 RecipeId.From(recipeId), 
-                TechnicianId.From(technicianId)));
+                technician!));
             return NoContent();
         }
         catch (RecipeNotFoundException ex) { return NotFound(new { message = ex.Message }); }

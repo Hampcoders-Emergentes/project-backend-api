@@ -1,9 +1,11 @@
 using System.Net.Mime;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Commands;
+using Hampcoders.Electrolink.API.Assets.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Assets.Domain.Services;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
@@ -14,7 +16,9 @@ namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 [Route("api/v1/technicians/{technicianId}/inventory")]
 [Produces(MediaTypeNames.Application.Json)]
 [SwaggerTag("Technician Inventory Endpoints")]
-public class TechnicianInventoriesController(ITechnicianInventoryCommandService inventoryCommandService, ITechnicianInventoryQueryService inventoryQueryService) : ControllerBase
+// M3.24: the route technicianId must be the authenticated technician's own subject (TechnicianRoute).
+public class TechnicianInventoriesController(ITechnicianInventoryCommandService inventoryCommandService, ITechnicianInventoryQueryService inventoryQueryService,
+    IProfilesContextFacade profiles) : ControllerBase
 {
     [HttpPost]
     [SwaggerOperation(Summary = "Create technician inventory", OperationId = "CreateTechnicianInventory")]
@@ -23,9 +27,11 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     [SwaggerResponse(StatusCodes.Status400BadRequest, "Could not create inventory")]
     public async Task<IActionResult> CreateTechnicianInventory([FromRoute] string technicianId)
     {
+        var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
         try
         {
-            var command = new CreateTechnicianInventoryCommand(TechnicianId.From(technicianId));
+            var command = new CreateTechnicianInventoryCommand(technician!);
             var inventory = await inventoryCommandService.Handle(command);
             if (inventory is null) return BadRequest("Could not create inventory.");
 
@@ -36,6 +42,7 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
         {
             return Conflict(new { message = ex.Message });
         }
+        catch (DuplicateAssetException ex) { return Conflict(new { message = ex.Message }); }
     }
 
     [HttpPost("stock-items")]
@@ -45,6 +52,8 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     [SwaggerResponse(StatusCodes.Status404NotFound, "Inventory not found")]
     public async Task<IActionResult> AddStockItemToInventory([FromRoute] string technicianId, [FromBody] AddStockToInventoryResource resource)
     {
+        var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
         try
         {
             var command = AddStockToInventoryCommandFromResourceAssembler.ToCommandFromResource(resource, technicianId);
@@ -57,6 +66,8 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
         {
             return NotFound(new { message = ex.Message });
         }
+        catch (AssetNotFoundException) { return PropertyOwnerRoute.NotFound(this); }
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
     }
 
     [HttpPut("{componentId}")]
@@ -68,12 +79,19 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
         [FromRoute] string componentId,
         [FromBody] UpdateComponentStockResource resource)
     {
-        var command = UpdateComponentStockCommandFromResourceAssembler.ToCommandFromResource(resource, technicianId, componentId);
-        var inventory = await inventoryCommandService.Handle(command);
-        if (inventory is null) return NotFound();
+        var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
+        try
+        {
+            var command = UpdateComponentStockCommandFromResourceAssembler.ToCommandFromResource(resource, technicianId, componentId);
+            var inventory = await inventoryCommandService.Handle(command);
+            if (inventory is null) return NotFound();
 
-        var response = await BuildResponseAsync(technicianId);
-        return Ok(response);
+            var response = await BuildResponseAsync(technicianId);
+            return Ok(response);
+        }
+        catch (KeyNotFoundException) { return PropertyOwnerRoute.NotFound(this); }
+        catch (AssetNotFoundException) { return PropertyOwnerRoute.NotFound(this); }
     }
 
     [HttpDelete("{componentId}")]
@@ -82,11 +100,20 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     [SwaggerResponse(StatusCodes.Status404NotFound, "Component or inventory not found")]
     public async Task<IActionResult> RemoveComponentStock([FromRoute] string technicianId, [FromRoute] string componentId)
     {
-        var command = RemoveComponentStockCommandAssembler.ToCommandFromResource(technicianId, componentId);
-        var result = await inventoryCommandService.Handle(command);
-        if (!result) return NotFound();
+        var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
+        try
+        {
+            var command = RemoveComponentStockCommandAssembler.ToCommandFromResource(technicianId, componentId);
+            var result = await inventoryCommandService.Handle(command);
+            if (!result) return NotFound();
 
-        return NoContent();
+            return NoContent();
+        }
+        catch (KeyNotFoundException) { return PropertyOwnerRoute.NotFound(this); }
+        catch (AssetNotFoundException) { return PropertyOwnerRoute.NotFound(this); }
+        // Domain rule: a component with remaining stock cannot be removed.
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
     }
 
     [HttpGet]
@@ -95,7 +122,9 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     [SwaggerResponse(StatusCodes.Status404NotFound, "Inventory not found")]
     public async Task<IActionResult> GetInventoryByTechnicianId([FromRoute] string technicianId)
     {
-        var query = new GetInventoryByTechnicianIdQuery(TechnicianId.From(technicianId));
+        var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
+        var query = new GetInventoryByTechnicianIdQuery(technician!);
         var readModel = await inventoryQueryService.Handle(query);
         if (readModel is null) return NotFound();
 
@@ -113,6 +142,8 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
         [FromRoute] string componentId,
         [FromBody] AdjustStockAmountResource resource)
     {
+        var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
         try
         {
             var command = IncreaseStockCommandFromResourceAssembler.ToCommandFromResource(resource, technicianId, componentId);
@@ -129,6 +160,7 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
         {
             return BadRequest(new { message = ex.Message });
         }
+        catch (AssetNotFoundException) { return PropertyOwnerRoute.NotFound(this); }
     }
 
     [HttpPatch("{componentId}/decrease")]
@@ -141,6 +173,8 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
         [FromRoute] string componentId,
         [FromBody] AdjustStockAmountResource resource)
     {
+        var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
         try
         {
             var command = DecreaseStockCommandFromResourceAssembler.ToCommandFromResource(resource, technicianId, componentId);
@@ -157,6 +191,7 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
         {
             return BadRequest(new { message = ex.Message });
         }
+        catch (AssetNotFoundException) { return PropertyOwnerRoute.NotFound(this); }
     }
 
     [HttpGet("stock-items")]
@@ -164,7 +199,9 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     [SwaggerResponse(StatusCodes.Status200OK, "The list of stock items with component details", typeof(IEnumerable<ComponentStockResource>))]
     public async Task<IActionResult> GetInventoryItems([FromRoute] string technicianId)
     {
-        var query = new GetStockItemsByTechnicianIdQuery(TechnicianId.From(technicianId));
+        var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
+        var query = new GetStockItemsByTechnicianIdQuery(technician!);
         var stockItems = await inventoryQueryService.Handle(query);
         
         var resources = stockItems.Select(item => new ComponentStockResource(

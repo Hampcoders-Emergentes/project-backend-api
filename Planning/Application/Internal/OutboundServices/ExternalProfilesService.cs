@@ -26,14 +26,32 @@ public class ExternalProfilesService(IProfilesContextFacade profilesContextFacad
     public async Task<string?> GetTechnicianIdByUserIdAsync(string userId)
         => await profilesContextFacade.GetTechnicianIdByUserIdAsync(userId);
 
-    // Active Company profile of this IAM user, with a concordant subject; null for any other actor.
-    public async Task<ClientIdentity?> GetActiveCompanyClientByUserIdAsync(string userId)
+    // Active HomeOwner/Company profile of this IAM user, with a concordant subject; null for any other actor (M3.29).
+    public async Task<ClientIdentity?> GetActiveClientByUserIdAsync(string userId)
     {
         var claims = await profilesContextFacade.GetProfileClaimsAsync(userId);
-        if (claims is not { ProfileStatus: "Active", BusinessRole: "Company", RoleSubjectId: not null } profile
-            || await profilesContextFacade.GetProfileIdByCompanyIdAsync(profile.RoleSubjectId) != profile.ProfileId)
+        if (claims is not { ProfileStatus: "Active", RoleSubjectId: not null } profile) return null;
+        if (profile.BusinessRole == "HomeOwner"
+            && await profilesContextFacade.GetProfileIdByHomeownerIdAsync(profile.RoleSubjectId) == profile.ProfileId)
+            return ClientIdentity.FromHomeowner(profile.RoleSubjectId);
+        if (profile.BusinessRole == "Company"
+            && await profilesContextFacade.GetProfileIdByCompanyIdAsync(profile.RoleSubjectId) == profile.ProfileId)
+            return ClientIdentity.FromCompany(profile.RoleSubjectId);
+        return null;
+    }
+
+    // Active Company profile of this IAM user, with a concordant subject; null for any other actor.
+    public async Task<ClientIdentity?> GetActiveCompanyClientByUserIdAsync(string userId)
+        => await GetActiveClientByUserIdAsync(userId) is { ClientType: EClientType.Company } company ? company : null;
+
+    // Active Technician profile of this IAM user whose subject Profiles links to it; null for any other actor (M3.26).
+    public async Task<(string TechnicianId, string ProfileId)?> GetActiveTechnicianByUserIdAsync(string userId)
+    {
+        var claims = await profilesContextFacade.GetProfileClaimsAsync(userId);
+        if (claims is not { ProfileStatus: "Active", BusinessRole: "Technician", RoleSubjectId: not null } profile
+            || await profilesContextFacade.GetTechnicianIdByUserIdAsync(userId) != profile.RoleSubjectId)
             return null;
-        return ClientIdentity.FromCompany(profile.RoleSubjectId);
+        return (profile.RoleSubjectId, profile.ProfileId);
     }
 
     public async Task<bool> IsClientActiveAsync(ClientIdentity client)

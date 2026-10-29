@@ -1,9 +1,11 @@
 ﻿using Hampcoders.Electrolink.API.Assets.Domain.Model.Commands;
+using Hampcoders.Electrolink.API.Assets.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Assets.Domain.Services;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 
@@ -15,9 +17,11 @@ namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 [ApiController]
 [Route("api/v1/technicians/{technicianId}/[controller]")]
 [SwaggerTag("Component Types Management")]
+// M3.25: global catalogue; see ComponentCatalogAccess for the read/write policy.
 public class ComponentTypesController(
     IComponentTypeCommandService componentTypeCommandService,
-    IComponentTypeQueryService componentTypeQueryService) : ControllerBase
+    IComponentTypeQueryService componentTypeQueryService,
+    IProfilesContextFacade profiles) : ControllerBase
 {
     [HttpPost]
     [SwaggerOperation(Summary = "Create Component Type", OperationId = "CreateComponentType")]
@@ -27,11 +31,16 @@ public class ComponentTypesController(
         [FromRoute] string technicianId,
         [FromBody] CreateComponentTypeResource resource)
     {
-        var command = CreateComponentTypeCommandFromResourceAssembler.ToCommandFromResource(resource);
-        var componentType = await componentTypeCommandService.Handle(command);
-        if (componentType is null) return BadRequest();
+        if (ComponentCatalogAccess.AuthorizeWrite(this) is { } denied) return denied;
+        try
+        {
+            var command = CreateComponentTypeCommandFromResourceAssembler.ToCommandFromResource(resource);
+            var componentType = await componentTypeCommandService.Handle(command);
+            if (componentType is null) return BadRequest();
 
-        return Ok(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType));
+            return Ok(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType));
+        }
+        catch (DuplicateAssetException ex) { return Conflict(new { message = ex.Message }); }
     }
 
     [HttpGet("{typeId}", Name = nameof(GetComponentTypeById))]
@@ -42,6 +51,8 @@ public class ComponentTypesController(
         [FromRoute] string technicianId,  
         [FromRoute] string typeId)
     {
+        var denied = await ComponentCatalogAccess.AuthorizeReadAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
         var query = new GetComponentTypeByIdQuery(ComponentTypeId.From(typeId));
         var componentType = await componentTypeQueryService.Handle(query);
         if (componentType is null) return NotFound();
@@ -54,6 +65,8 @@ public class ComponentTypesController(
     [SwaggerResponse(StatusCodes.Status200OK, "List of component types retrieved", typeof(IEnumerable<ComponentTypeResource>))]
     public async Task<IActionResult> GetAllComponentTypes([FromRoute] string technicianId)  
     {
+        var denied = await ComponentCatalogAccess.AuthorizeReadAsync(this, profiles, technicianId);
+        if (denied is not null) return denied;
         var query = new GetAllComponentTypesQuery();
         var componentTypes = await componentTypeQueryService.Handle(query);
         var resources = componentTypes.Select(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity);
@@ -69,11 +82,16 @@ public class ComponentTypesController(
         [FromRoute] string typeId,
         [FromBody] UpdateComponentTypeResource resource)
     {
-        var command = UpdateComponentTypeCommandFromResourceAssembler.ToCommandFromResource(resource, typeId);
-        var componentType = await componentTypeCommandService.Handle(command);
-        if (componentType is null) return NotFound("Component Type not found");
+        if (ComponentCatalogAccess.AuthorizeWrite(this) is { } denied) return denied;
+        try
+        {
+            var command = UpdateComponentTypeCommandFromResourceAssembler.ToCommandFromResource(resource, typeId);
+            var componentType = await componentTypeCommandService.Handle(command);
+            if (componentType is null) return NotFound("Component Type not found");
 
-        return Ok(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType));
+            return Ok(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType));
+        }
+        catch (AssetNotFoundException) { return NotFound("Component Type not found"); }
     }
 
     [HttpDelete("{typeId}")]
@@ -84,11 +102,17 @@ public class ComponentTypesController(
         [FromRoute] string technicianId,  
         [FromRoute] string typeId)
     {
-        var command = new DeleteComponentTypeCommand(ComponentTypeId.From(typeId));
-        var result = await componentTypeCommandService.Handle(command);
-        if (!result) return NotFound("Component Type not found");
+        if (ComponentCatalogAccess.AuthorizeWrite(this) is { } denied) return denied;
+        try
+        {
+            var command = new DeleteComponentTypeCommand(ComponentTypeId.From(typeId));
+            var result = await componentTypeCommandService.Handle(command);
+            if (!result) return NotFound("Component Type not found");
 
-        return NoContent();
+            return NoContent();
+        }
+        // A type referenced by technician stock cannot be deleted.
+        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
     }
 
     [HttpPatch("{typeId}/activate")]
@@ -100,6 +124,7 @@ public class ComponentTypesController(
         [FromRoute] string technicianId,
         [FromRoute] string typeId)
     {
+        if (ComponentCatalogAccess.AuthorizeWrite(this) is { } denied) return denied;
         try
         {
             var command = new ActivateComponentTypeCommand(ComponentTypeId.From(typeId));
@@ -108,6 +133,7 @@ public class ComponentTypesController(
             return Ok(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType));
         }
         catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
+        catch (AssetNotFoundException) { return NotFound(); }
     }
 
     [HttpPatch("{typeId}/deactivate")]
@@ -119,6 +145,7 @@ public class ComponentTypesController(
         [FromRoute] string technicianId,
         [FromRoute] string typeId)
     {
+        if (ComponentCatalogAccess.AuthorizeWrite(this) is { } denied) return denied;
         try
         {
             var command = new DeactivateComponentTypeCommand(ComponentTypeId.From(typeId));
@@ -127,5 +154,6 @@ public class ComponentTypesController(
             return Ok(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType));
         }
         catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
+        catch (AssetNotFoundException) { return NotFound(); }
     }
 }

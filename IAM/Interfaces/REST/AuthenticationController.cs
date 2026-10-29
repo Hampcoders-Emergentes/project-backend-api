@@ -1,5 +1,6 @@
-using System.Net.Mime;
+﻿using System.Net.Mime;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Commands;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.IAM.Domain.Services;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes;
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Resources;
@@ -42,7 +43,12 @@ public class AuthenticationController(IUserCommandService userCommandService) : 
                 AuthenticatedUserResourceFromEntityAssembler.ToResourceFromEntity(authenticatedUser.user,
                     authenticatedUser.token);
             return Ok(resource);    
-        } catch (Exception ex)
+        }
+        catch (InactiveAccountException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (Exception ex)
         {
             return Unauthorized(new
             {
@@ -105,6 +111,10 @@ public class AuthenticationController(IUserCommandService userCommandService) : 
             var newToken = await userCommandService.Handle(command);
             var resource = RefreshedTokenResourceFromTokenAssembler.ToResourceFromToken(newToken);
             return Ok(resource);
+        }
+        catch (InactiveAccountException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
         catch (Exception ex)
         {

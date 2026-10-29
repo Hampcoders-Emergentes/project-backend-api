@@ -272,3 +272,89 @@ Modo opt-in `--property-ownership-http <manifiesto-nuevo>`, en un destino vacío
 - Un HomeOwner y un Company reales se registran por HTTP y crean sus propiedades por POST.
 - Verifica la lectura propia (200), el acceso cruzado (404 sin cambios en filas), el prefijo cruzado (404), anónimo y Edge (401) y la desactivación propia persistida.
 - Sin servicios externos. Evidencia en [tests/M3.22.md](../../tests/M3.22.md).
+
+## M3.23 — titularidad en `PropertyPortfoliosController`
+
+Modo opt-in `--portfolio-ownership-http <manifiesto-nuevo>`, en un destino vacío.
+
+- HomeOwner y Company reales; sus portfolios los crea el handler real de `ProfileCompleted`.
+- Verifica que el titular añade y quita su propiedad, y que otro owner, una propiedad ajena o un prefijo cruzado dan 404 sin cambios en las entradas, y Edge 401.
+- Evidencia en [tests/M3.23.md](../../tests/M3.23.md).
+
+## M3.24 — titularidad en `TechnicianInventoriesController`
+
+Modo opt-in `--inventory-ownership-http <manifiesto-nuevo>`, en un destino vacío.
+
+- Dos técnicos reales; sus inventarios los crea el handler real de `ProfileCompleted`.
+- Verifica la lectura propia (200), la creación repetida (409), el acceso del otro técnico (404 en lectura, creación, aumento y retirada), Edge (401) y que las filas no cambian.
+- Evidencia en [tests/M3.24.md](../../tests/M3.24.md).
+
+## M3.25 — catálogo de componentes y tipos
+
+Modo opt-in `--component-catalog-http <manifiesto-nuevo>`, en un destino vacío.
+
+- Admin real (servicio de staff), técnico y HomeOwner.
+- Verifica:
+  - escritura 403 para técnico y HomeOwner, lectura 403 para HomeOwner y Edge 401;
+  - el Admin crea entradas (un duplicado da 409);
+  - el técnico lee en su ruta y suma stock real en su inventario (4 + 2 = 6);
+  - borrar un tipo en uso da 409.
+- Evidencia en [tests/M3.25.md](../../tests/M3.25.md).
+
+## M3.26 — catálogo de servicios del técnico
+
+Modo opt-in `--service-catalog-http <manifiesto-nuevo>`, en un destino vacío.
+
+- Dos técnicos reales y servicios de catálogo reales.
+- Dobles: Monitoring devuelve 0 servicios activos o en curso y Subscriptions está bloqueada.
+- Verifica que el titular, vía `me`, crea, lee, desactiva y reactiva, y que el otro técnico recibe 404 y Edge 401, sin cambios en las filas.
+- Evidencia en [tests/M3.26.md](../../tests/M3.26.md).
+
+## M3.28 — inicio de sesión de cuentas no activas
+
+Modo opt-in `--inactive-sign-in-http <manifiesto-nuevo>`, en un destino vacío.
+
+- Usuario real; suspensión y reactivación con el `IUserCommandService` real.
+- Verifica:
+  - token previo 403 tras la suspensión;
+  - inicio de sesión 403 sin token;
+  - contraseña incorrecta 401;
+  - inicio de sesión correcto tras reactivar.
+- Evidencia en [tests/M3.28.md](../../tests/M3.28.md).
+
+## M3.29 — cliente de solicitudes resuelto en el servidor
+
+Modo opt-in `--service-request-client-http <manifiesto-nuevo>`, en un destino vacío.
+
+- Dos HomeOwner reales y servicios de solicitudes reales.
+- Dobles: elegibilidad de Subscriptions sintética; matching y snapshot bloqueados.
+- Verifica:
+  - el titular crea y lee su solicitud;
+  - el otro HomeOwner recibe 404;
+  - tras suspender el perfil del titular, su token previo recibe 403;
+  - Edge recibe 401.
+- Evidencia en [tests/M3.29.md](../../tests/M3.29.md).
+
+## M3.30 — sugerencias de servicio
+
+Modo opt-in `--service-suggestion-http <manifiesto-nuevo>`, en un destino vacío.
+
+- Dos HomeOwner reales; sugerencias preparadas con el repositorio real.
+- Verifica:
+  - el titular lista, marca como vista y acepta (la solicitud se crea con su cliente; repetir da 409);
+  - el otro HomeOwner recibe 404;
+  - el token previo de un perfil suspendido recibe 403;
+  - Edge recibe 401.
+- Evidencia en [tests/M3.30.md](../../tests/M3.30.md).
+
+## M3.31 — perfil de suscripción resuelto en el servidor
+
+Modo opt-in `--subscription-profile-http <manifiesto-nuevo>`, en un destino vacío.
+
+- Dos HomeOwner reales; suscripciones preparadas con el repositorio real; comandos de pago bloqueados.
+- Verifica:
+  - cada titular lee la suya;
+  - un perfil suspendido por pago sigue leyendo estado, elegibilidad e historial;
+  - un perfil desactivado recibe 403;
+  - Edge recibe 401.
+- Evidencia en [tests/M3.31.md](../../tests/M3.31.md).

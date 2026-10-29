@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Security.Claims;
 using System.Text.Json;
 using Electrolink.Backend.Characterization.Tests.Assets;
 using Hampcoders.Electrolink.API.Assets.Application.ACL;
@@ -23,6 +22,11 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
+using Hampcoders.Electrolink.API.Planning.Application.Internal.OutboundServices;
+using Hampcoders.Electrolink.API.Planning.Domain.Model.Queries;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Xunit;
 using IAssetsContextFacade = Hampcoders.Electrolink.API.Assets.Interfaces.ACL.IAssetsContextFacade;
 namespace Electrolink.Backend.Characterization.Tests.Planning;
@@ -100,17 +104,30 @@ public sealed class SelectPropertyOwnershipTests
             // Only the collaborators SelectProperty uses are present; the rest would fail if touched.
             var service = new ServiceRequestCommandService(requests, null!, null!, null!, null!, Facade(Own, foreign), null!, unit,
                 NullLogger<ServiceRequestCommandService>.Instance);
-            var queries = AssignmentHttpFixture.Proxy<IServiceDesignQueryService>((m, a) => throw new InvalidOperationException("Unexpected query"));
+            // M3.29: the controller checks the request's owner with the summary query (real semantics: same client only).
+            var queries = AssignmentHttpFixture.Proxy<IServiceDesignQueryService>((m, a) => a![0] is GetServiceRequestSummaryQuery q
+                ? Task.FromResult<ServiceRequest?>(q.RequestId == Request.RequestId && q.Client == Request.Client ? Request : null)
+                : throw new InvalidOperationException("Unexpected query"));
+            // M3.29: the client comes from the IAM user and Profiles (an active, concordant HomeOwner), not from JWT claims.
+            var actor = User.Create(Email.From("m320-client@example.invalid"), HashedPassword.FromHash("synthetic"), AccessRole.User);
+            var profiles = AssignmentHttpFixture.Proxy<IProfilesContextFacade>((m, a) => m.Name switch
+            {
+                nameof(IProfilesContextFacade.GetProfileClaimsAsync) => Task.FromResult<(string ProfileId, string ProfileStatus, string? BusinessRole, string? RoleSubjectId, string? SubscriptionTier)?>(
+                    ("prof-synthetic-m320", "Active", "HomeOwner", Client, null)),
+                nameof(IProfilesContextFacade.GetProfileIdByHomeownerIdAsync) => Task.FromResult<string?>("prof-synthetic-m320"),
+                _ => throw new InvalidOperationException("Unexpected profile call " + m.Name)
+            });
             server = new TestServer(new WebHostBuilder().ConfigureServices(services =>
             {
                 services.AddSingleton<IServiceRequestCommandService>(service); services.AddSingleton(queries);
+                services.AddSingleton(new ExternalProfilesService(profiles));
                 services.AddControllers(o => o.Conventions.Add(new Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Configuration.KebabCaseRouteNamingConvention()))
                     .AddApplicationPart(typeof(ServiceRequestController).Assembly).ConfigureApplicationPartManager(m => m.FeatureProviders.Add(new OnlyServiceRequestController()));
             }).Configure(app =>
             {
                 app.UseRouting(); app.Use(async (context, next) =>
                 {
-                    context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("businessRole", "HOMEOWNER"), new Claim("roleSubjectId", Client)], "synthetic"));
+                    context.Items["User"] = actor;
                     await next();
                 }); app.UseEndpoints(e => e.MapControllers());
             })); client = server.CreateClient();
