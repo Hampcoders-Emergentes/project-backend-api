@@ -54,8 +54,9 @@ public class ServiceRequestCommandService(
         var geolocation = await assetsFacade.GetPropertyGeolocationAsync(
             command.PropertyId.Value, command.Client.ClientId);
 
+        // Missing and foreign properties are indistinguishable to the caller.
         if (geolocation is null)
-            throw new InvalidOperationException("Property geolocation data unavailable.");
+            throw new PropertyUnavailableForRequestException();
         
         request.SelectProperty(command.PropertyId, Geolocation.Create(geolocation.Value.Latitude, geolocation.Value.Longitude, null, "MANUAL"));
 

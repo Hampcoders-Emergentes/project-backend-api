@@ -241,3 +241,34 @@ Compilar antes con la exclusión AppleDouble entrecomillada ya documentada. El m
 Comprueba titular desde actor pese a IDs forjados, lectura propia/Location, conteos y páginas SQL, alias/listados/contador activo propios, rechazo de stock ajeno o NULL en una solicitud por lo demás válida, asignación propia→instalación lógica y disponible 2→1. Admin/SuperAdmin sin perfil técnico, cliente, Edge, anónimo y técnico IAM suspendido rechazados; sin comunicaciones. No verifica aprovisionamiento HTTP de cuentas staff o matching comercial.
 
 Para --assignment-race de M3.15 ahora compiten dos solicitudes del **mismo técnico propietario**, con dos contextos leyendo InStock: conserva 200/409, rollback de propiedad y evento único. El antiguo supuesto de dos titulares distintos sobre stock global quedó sustituido por la corrección expresa del usuario; no se elimina la aserción de exclusión. --assignment-http registra técnicamente dispositivos con propietario explícito de fixture antes de probar HTTP assign/install. [Evidencia vigente](../../tests/M3.16.md).
+
+
+## M3.19 — propiedad de la instalación Enterprise por el Company titular
+
+Modo opt-in `--installation-property-http <manifiesto-nuevo>`. Requiere un destino nuevo y vacío (export revisado + 001/002/003); no reutilizar manifiestos poblados.
+
+- **Real:** IAM/JWT, Profiles, Assets, Planning y EF/Npgsql. Dos Company y un técnico se registran y completan por HTTP.
+- **Preparación técnica:** las propiedades se crean con el servicio de Assets y la receta Installation con el dominio de catálogo.
+- **Creación de la solicitud:** con el handler real de Planning. Solo la fachada de Subscriptions es un registrador.
+- **Matching:** `ServiceAssignmentCommandService` + `HybridMatchingService` reales. El proveedor de IA es un centinela que bloquea y cuenta, sin red, por lo que se usa el fallback determinista existente.
+- **Configuración Npgsql:** el modo activa `EnableDynamicJson()` en su proceso, igual que `Program.cs`.
+
+Verifica:
+- la persistencia de PendingInstallation con el Client Company;
+- los rechazos 401/403/404/400 sin efectos;
+- la carrera 200/409 con un interceptor;
+- la repetición 409;
+- la aceptación del reader;
+- assign e install del técnico sobre su stock;
+- NoCandidates persistido;
+- 0 llamadas a cupo, flujo legado o HTTP saliente.
+
+No ejecuta Stripe, jobs, MQTT ni Program. Evidencia en [tests/M3.19.md](../../tests/M3.19.md).
+
+## M3.22 — titularidad en `PropertiesController`
+
+Modo opt-in `--property-ownership-http <manifiesto-nuevo>`, en un destino vacío.
+
+- Un HomeOwner y un Company reales se registran por HTTP y crean sus propiedades por POST.
+- Verifica la lectura propia (200), el acceso cruzado (404 sin cambios en filas), el prefijo cruzado (404), anónimo y Edge (401) y la desactivación propia persistida.
+- Sin servicios externos. Evidencia en [tests/M3.22.md](../../tests/M3.22.md).

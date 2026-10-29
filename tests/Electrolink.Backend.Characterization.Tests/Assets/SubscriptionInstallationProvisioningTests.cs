@@ -58,12 +58,13 @@ public sealed class SubscriptionInstallationProvisioningTests
     }
 
     [Fact]
-    public void Subscription_installation_request_has_no_property_client_or_technician_to_assign()
+    public void Subscription_installation_request_has_no_property_or_technician_to_assign()
     {
-        var request = ServiceRequest.CreateIoTInstallationRequest("sub-synthetic", "us-synthetic", 3, DateTime.UtcNow.AddDays(30));
+        // M3.19: the subscription's Company is the client from creation; property and technician still come later.
+        var request = ServiceRequest.CreateIoTInstallationRequest("sub-synthetic", "us-synthetic", ClientIdentity.FromCompany("comp-synthetic"), 3, DateTime.UtcNow.AddDays(30));
         Assert.Equal(ERequestStatus.PendingInstallation, request.Status);
         Assert.Equal(3, request.RequiredDeviceCount);
-        Assert.Null(request.PropertyId); Assert.Null(request.Client); Assert.Null(request.RequestedCategory);
+        Assert.Null(request.PropertyId); Assert.Equal(ClientIdentity.FromCompany("comp-synthetic"), request.Client); Assert.Null(request.RequestedCategory);
         Assert.Null(request.SelectedTechnicianId); Assert.Null(request.AssignmentId);
         // Matching assigns only PendingAssignment requests; snapshot is never reached past the status check.
         Assert.Throws<InvalidRequestStatusException>(() =>
@@ -73,7 +74,7 @@ public sealed class SubscriptionInstallationProvisioningTests
     [Fact]
     public async Task Subscription_installation_request_is_not_an_assigned_installation_for_http_assign()
     {
-        var request = ServiceRequest.CreateIoTInstallationRequest("sub-synthetic", "us-synthetic", 1, DateTime.UtcNow.AddDays(30));
+        var request = ServiceRequest.CreateIoTInstallationRequest("sub-synthetic", "us-synthetic", ClientIdentity.FromCompany("comp-synthetic"), 1, DateTime.UtcNow.AddDays(30));
         var requests = AssignmentHttpFixture.Proxy<IServiceRequestRepository>((m, a) =>
             m.Name == nameof(IServiceRequestRepository.FindByIdAsync) ? Task.FromResult<ServiceRequest?>(request) : throw new InvalidOperationException("Unexpected request call"));
         // The persisted status is rejected before the assignment table is read, so no context is needed.

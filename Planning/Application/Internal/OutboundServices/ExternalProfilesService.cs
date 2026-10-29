@@ -26,6 +26,16 @@ public class ExternalProfilesService(IProfilesContextFacade profilesContextFacad
     public async Task<string?> GetTechnicianIdByUserIdAsync(string userId)
         => await profilesContextFacade.GetTechnicianIdByUserIdAsync(userId);
 
+    // Active Company profile of this IAM user, with a concordant subject; null for any other actor.
+    public async Task<ClientIdentity?> GetActiveCompanyClientByUserIdAsync(string userId)
+    {
+        var claims = await profilesContextFacade.GetProfileClaimsAsync(userId);
+        if (claims is not { ProfileStatus: "Active", BusinessRole: "Company", RoleSubjectId: not null } profile
+            || await profilesContextFacade.GetProfileIdByCompanyIdAsync(profile.RoleSubjectId) != profile.ProfileId)
+            return null;
+        return ClientIdentity.FromCompany(profile.RoleSubjectId);
+    }
+
     public async Task<bool> IsClientActiveAsync(ClientIdentity client)
         => client.ClientType switch
         {

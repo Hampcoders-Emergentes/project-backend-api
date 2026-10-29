@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Planning.Application.Internal.OutboundServices;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Planning.Domain.Repositories;
 using Hampcoders.Electrolink.API.Shared.Application.Internal.EventHandler;
@@ -11,6 +12,7 @@ public class EnterpriseSubscriptionPendingInstallationEventHandler(
     IServiceRequestRepository serviceRequestRepository,
     IUnitOfWork unitOfWork,
     ISubscriptionContextFacade subscriptionContextFacade,
+    ExternalProfilesService profilesService,
     ILogger<EnterpriseSubscriptionPendingInstallationEventHandler> logger)
     : IEventHandler<EnterpriseSubscriptionPendingInstallationEvent>
 {
@@ -26,9 +28,14 @@ public class EnterpriseSubscriptionPendingInstallationEventHandler(
             return;
         }
 
+        // The request's client is the subscription owner's Company, resolved by Profiles; no placeholder client.
+        var client = await profilesService.GetActiveCompanyClientByUserIdAsync(@event.UserId)
+            ?? throw new InvalidOperationException("Enterprise installation requires the subscription owner's active Company profile.");
+
         var serviceRequest = ServiceRequest.CreateIoTInstallationRequest(
             subscriptionId: @event.SubscriptionId,
             userId: @event.UserId,
+            client: client,
             requiredDeviceCount: @event.InitialDeviceCount,
             installationDeadline: @event.InstallationDeadlineAt);
 

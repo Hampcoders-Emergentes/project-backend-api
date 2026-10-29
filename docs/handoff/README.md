@@ -116,3 +116,44 @@ Verificación final 263/263 y 64/64 focalizadas, build 0 errores con exclusión 
 El usuario autorizó commit/push de los cambios al terminar: publicación de M3.14/M3.15/M3.16 en develop de Hampcoders-Emergentes/project-backend-api, base anterior 42b9fb8. Consultar git log -1 develop y origen para el hash de la publicación; los informes anteriores conservan su estado histórico sin commit. Mantener metadatos Rider/AppleDouble, manifiestos y binarios fuera. No supone permiso de despliegue o cambios compartidos.
 
 Punto 1 sigue pendiente de selección persistida y coordinación comercial en Planning/Subscriptions, transferencias y conciliación autorizada del stock sin titular. La consulta disponible permite revisar dispositivos, pero no valida automáticamente todos los materiales, cupos o requisitos del servicio ni reserva al consultar. No activar primer stock implícito para completar scheduling. M2.5 continúa pendiente solo para conciliación real. Pruebas, archivos y recuperación selectiva en tests/M3.16.md.
+
+
+## Continuidad vigente M3.17–M3.19 — aprovisionamiento por suscripción
+
+- **M3.17** (commit local 29d0d13, sin push): la selección de dispositivo es solo por POST assign del técnico. Se retiraron el puente por evento con `SelectedDeviceId` y la fachada de primer stock global.
+- **M3.18:** trazado y caracterización del ciclo Enterprise. Decisiones 1–4 aprobadas por el usuario; la decisión 0 (contrato del checkout: StripeSubscriptionId/InitialDeviceCount) sigue abierta.
+- **M3.19** (sin commit):
+  - `POST /api/v1/service-requests/{requestId}/installation-property`: el Company titular fija una propiedad propia, activa y no archivada; la solicitud pasa de PendingInstallation a PendingAssignment, se guarda y se ejecuta el matching existente sin cupo.
+  - La fábrica exige el Client Company resuelto por Profiles: sin él, PostgreSQL rechazaba la fila (23502).
+  - `ServiceRequest.Status` es token de concurrencia EF, sin DDL; export `cd69a8a0…` sin cambios.
+  - 302/302 pruebas. PostgreSQL real: `--installation-property-http` y `--assignment-http` en verde, en destinos nuevos detenidos con sus datos.
+- **Hallazgos abiertos:**
+  - `GetPropertyByIdQuery` ignora el titular, así que el `SelectProperty` existente no verifica titularidad.
+  - `ServiceAssignment` no se puede materializar desde sus jsonb.
+  - Pendientes: activación al completar N, vencimiento parcial y Stripe real.
+- **Detalle:** tests/M3.17.md, tests/M3.18.md y tests/M3.19.md.
+
+### M3.20 — titularidad en `SelectProperty` (sin commit)
+
+- `AssetsContextFacade.GetPropertyGeolocationAsync` y `PropertyBelongsToOwnerAsync` comparan ahora el titular, porque `GetPropertyByIdQuery` lo ignora.
+- `SelectProperty` responde 404 genérico ante una propiedad ajena o inexistente (antes: 204 y 500).
+- 310/310 pruebas.
+- Abierto: `PropertiesController` toma el owner de la ruta sin vincularlo al actor (posible IDOR); propiedades inactivas o archivadas en `SelectProperty` sin política. Ver tests/M3.20.md.
+
+### M3.21 — caracterización del IDOR en `PropertiesController` (sin corregir, sin commit)
+
+- 7 pruebas de caracterización (317/317) confirman que cualquier JWT válido, incluso de un usuario suspendido, lista, lee, crea, desactiva, activa, mueve y archiva propiedades de otros owners, y obtiene URLs de foto firmadas nombrando a la víctima en la ruta.
+- El middleware IAM no comprueba `User.Status`.
+- Propuesta M3.22 y patrón similar en otros 5 controllers: ver tests/M3.21.md.
+
+### M3.22 — `PropertiesController` vinculado al actor (sin commit)
+
+- El `ownerId` de la ruta debe ser el subject HomeOwner o Company del actor IAM activo (`PropertyOwnerResolver`).
+- Actor no elegible → 403; owner ajeno, prefijo cruzado o propiedad ajena o inexistente → 404 genérico.
+- `GetPropertyByIdQuery` filtra por titular. Sin bypass Admin. Sin esquema.
+- 333/333 pruebas. PostgreSQL `--property-ownership-http` y `--installation-property-http` en verde.
+- Pendiente:
+  - el mismo patrón en otros 5 controllers;
+  - el middleware IAM sigue sin comprobar `User.Status`;
+  - compatibilidad de los clientes web y móvil sin verificar.
+- Ver tests/M3.22.md.

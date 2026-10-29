@@ -74,6 +74,11 @@ public interface IAssetsContextFacade
     /// Returns true if the property belongs to the given ownerId and is IN_PORTFOLIO.
     /// </summary>
     Task<bool> PropertyBelongsToOwnerAsync(string propertyId, string ownerId);
+
+    /// <summary>
+    /// Geolocation of an active, non-archived property only when it belongs to the given owner; otherwise null.
+    /// </summary>
+    Task<(double Latitude, double Longitude)?> GetActiveOwnedPropertyGeolocationAsync(string propertyId, Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects.ClientIdentity owner);
     
 
     // ── Portfolio ─────────────────────────────────────────

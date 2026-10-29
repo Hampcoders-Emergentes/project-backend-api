@@ -2,7 +2,7 @@ using Electrolink.Backend.Characterization.Tests.StoreManagement;
 
 if (args.Length is < 1 or > 2)
 {
-    Console.Error.WriteLine("Usage: StoreManagementPostgresDemo [--registration-http <manifest> | --assignment-race <manifest> | --assignment-http <manifest> | --installation-http <manifest> | --store-alert-history <manifest> | --alert-history <manifest> | --company-layers <manifest> | --company-http <manifest> | --measurement-history <manifest> | --device-read <manifest> | --retirement-http <manifest> | --revocation <manifest> | --real-backend <manifest> | --export-legacy-schema <output.sql> | <manifest>]");
+    Console.Error.WriteLine("Usage: StoreManagementPostgresDemo [--property-ownership-http <manifest> | --installation-property-http <manifest> | --registration-http <manifest> | --assignment-race <manifest> | --assignment-http <manifest> | --installation-http <manifest> | --store-alert-history <manifest> | --alert-history <manifest> | --company-layers <manifest> | --company-http <manifest> | --measurement-history <manifest> | --device-read <manifest> | --retirement-http <manifest> | --revocation <manifest> | --real-backend <manifest> | --export-legacy-schema <output.sql> | <manifest>]");
     return 2;
 }
 try
@@ -13,6 +13,8 @@ try
         await File.WriteAllTextAsync(args[1], M35PostgresDemo.LegacySchema());
         Console.WriteLine("Legacy schema exported offline for review; no database connection opened.");
     }
+    else if (args.Length == 2 && args[0] == "--property-ownership-http") await M322PropertyOwnershipDemo.Run(args[1]);
+    else if (args.Length == 2 && args[0] == "--installation-property-http") await M319SubscriptionInstallationDemo.Run(args[1]);
     else if (args.Length == 2 && args[0] == "--registration-http") await M316DeviceRegistrationDemo.Run(args[1]);
     else if (args.Length == 2 && args[0] == "--assignment-race") await M315AssignmentRaceDemo.Run(args[1]);
     else if (args.Length == 2 && args[0] == "--assignment-http") await M314DeviceAssignmentDemo.Run(args[1]);

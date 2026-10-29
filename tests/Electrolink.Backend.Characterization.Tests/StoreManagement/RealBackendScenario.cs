@@ -48,7 +48,8 @@ internal sealed class RealBackendScenario : IDemoHttpScenario
     internal RetirementEventWitness RetirementEvents { get; } = new();
     internal int AssetMutationEvents { get; private set; }
     internal int ForbiddenCalls { get; private set; }
-    internal RealBackendScenario(string connection, string secret, string edgeKey, string serial, bool machineScope = true, bool includeRetirementHandler = false, bool includeRetirementEndpoint = false, bool observeAssetMutations = false, CompanyCompletionTrace? companyTrace = null, bool includeInstallationHandler = false, bool includeAssignmentHandler = false, Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor? saveInterceptor = null)
+    internal RealBackendScenario(string connection, string secret, string edgeKey, string serial, bool machineScope = true, bool includeRetirementHandler = false, bool includeRetirementEndpoint = false, bool observeAssetMutations = false, CompanyCompletionTrace? companyTrace = null, bool includeInstallationHandler = false, bool includeAssignmentHandler = false, Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor? saveInterceptor = null,
+        Action<IServiceCollection>? extraServices = null, Type[]? extraControllers = null)
     {
         this.edgeKey = edgeKey;
         // Call actual module registration extensions without building/running this WebApplicationBuilder.
@@ -107,6 +108,8 @@ internal sealed class RealBackendScenario : IDemoHttpScenario
                 }
                 if (companyTrace != null)
                     services.AddSingleton<INotificationHandler<Hampcoders.Electrolink.API.Profiles.Domain.Model.Events.ProfileCompletedEvent>>(companyTrace);
+                // Opt-in additions for a mode's own scope (M3.19 Planning); defaults leave other modes unchanged.
+                extraServices?.Invoke(services);
                 services.AddSingleton(Block<IFileStorageService>());
                 services.AddSingleton(Block<IDeviceReadingStreamCommandService>());
                 services.AddSingleton(Block<IRelayCommandService>());
@@ -119,7 +122,7 @@ internal sealed class RealBackendScenario : IDemoHttpScenario
                     if (companyTrace != null) options.Filters.Add(companyTrace);
                 })
                     .AddApplicationPart(typeof(Hampcoders.Electrolink.API.StoreManagement.Interfaces.REST.StoresController).Assembly)
-                    .ConfigureApplicationPartManager(m => m.FeatureProviders.Add(new OnlyJourneyControllers(includeRetirementEndpoint)));
+                    .ConfigureApplicationPartManager(m => m.FeatureProviders.Add(new OnlyJourneyControllers(includeRetirementEndpoint, extraControllers ?? [])));
                 services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => options.TokenValidationParameters = new()
                 { ValidateIssuerSigningKey = true, IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secret)),
                     ValidateIssuer = false, ValidateAudience = false, ValidateLifetime = true, ClockSkew = TimeSpan.Zero });
@@ -254,7 +257,7 @@ internal sealed class RealBackendScenario : IDemoHttpScenario
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         { invoked(); throw new InvalidOperationException("Outbound HTTP forbidden"); }
     }
-    private sealed class OnlyJourneyControllers(bool retirementEndpoint) : IApplicationFeatureProvider<ControllerFeature>
+    private sealed class OnlyJourneyControllers(bool retirementEndpoint, Type[] extraControllers) : IApplicationFeatureProvider<ControllerFeature>
     {
         public void PopulateFeature(IEnumerable<ApplicationPart> parts, ControllerFeature feature)
         {
@@ -265,7 +268,7 @@ internal sealed class RealBackendScenario : IDemoHttpScenario
                 typeof(Hampcoders.Electrolink.API.AlertManagement.Interfaces.EquipmentAlertsController),
                 typeof(Hampcoders.Electrolink.API.AlertManagement.Interfaces.StoreAlertsController),
                 typeof(Hampcoders.Electrolink.API.Processing.Interfaces.REST.EdgeIngestionController) };
-            foreach (var controller in feature.Controllers.ToArray()) if (!allowed.Contains(controller.AsType()) && (!retirementEndpoint || controller.AsType() != typeof(Hampcoders.Electrolink.API.Assets.Interfaces.REST.Controllers.IoTDevicesController))) feature.Controllers.Remove(controller);
+            foreach (var controller in feature.Controllers.ToArray()) if (!allowed.Contains(controller.AsType()) && !extraControllers.Contains(controller.AsType()) && (!retirementEndpoint || controller.AsType() != typeof(Hampcoders.Electrolink.API.Assets.Interfaces.REST.Controllers.IoTDevicesController))) feature.Controllers.Remove(controller);
         }
     }
 }

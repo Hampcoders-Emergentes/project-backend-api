@@ -1,4 +1,7 @@
-﻿using Hampcoders.Electrolink.API.Planning.Domain.Model.Commands;
+﻿using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
+using Hampcoders.Electrolink.API.Planning.Application.Internal.CommandServices;
+using Hampcoders.Electrolink.API.Planning.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.ValueObjects;
@@ -8,6 +11,7 @@ using Hampcoders.Electrolink.API.Planning.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
+using HumanAuthorize = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AuthorizeAttribute;
 
 namespace Hampcoders.Electrolink.API.Planning.Interfaces.REST;
 
@@ -61,6 +65,7 @@ public class ServiceRequestController(
             return NoContent();
         }
         catch (InvalidRequestStatusException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (PropertyUnavailableForRequestException) { return NotFound(new { message = "Resource not found." }); }
     }
 
     [HttpGet("{requestId}/available-services")]
@@ -154,6 +159,29 @@ public class ServiceRequestController(
             return NoContent();
         }
         catch (CannotCancelAssignedRequestException ex) { return Conflict(new { message = ex.Message }); }
+    }
+
+    [HttpPost("{requestId}/installation-property"), HumanAuthorize]
+    [ProducesResponseType(typeof(InstallationPropertyAttachedResource), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> AttachInstallationProperty([FromRoute] string requestId,
+        [FromBody] AttachInstallationPropertyResource resource, [FromServices] SubscriptionInstallationPropertyService installations)
+    {
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        if (actor.Status != EUserStatus.Active) return StatusCode(StatusCodes.Status403Forbidden);
+        try
+        {
+            var (request, matching) = await installations.Handle(new AttachInstallationPropertyCommand(actor.Id, requestId, resource.PropertyId));
+            return Ok(new InstallationPropertyAttachedResource(request.RequestId.Value, request.PropertyId!.Value, request.Status.ToString(), matching.ToString()));
+        }
+        catch (InstallationPropertyActorDeniedException) { return StatusCode(StatusCodes.Status403Forbidden); }
+        catch (InstallationRequestUnavailableException) { return NotFound(new { message = "Resource not found." }); }
+        catch (InstallationRequestConflictException ex) { return Conflict(new { message = ex.Message }); }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
+            when (ex.Entries.Any(e => e.Entity is Hampcoders.Electrolink.API.Planning.Domain.Model.Aggregates.ServiceRequest r && r.RequestId.Value == requestId))
+        { return Conflict(new { message = new InstallationRequestConflictException().Message }); }
     }
 
     [HttpGet("{requestId}")]

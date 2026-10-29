@@ -60,12 +60,15 @@ public class ServiceRequest : BaseAggregateRoot
     public static ServiceRequest CreateIoTInstallationRequest(
         string subscriptionId,
         string userId,
+        ClientIdentity client,
         int requiredDeviceCount,
         DateTime installationDeadline)
     {
+        ArgumentNullException.ThrowIfNull(client);
         var request = new ServiceRequest
         {
             RequestId = RequestId.NewId(),
+            Client = client,
             SubscriptionId = subscriptionId,
             UserId = userId,
             RequiredDeviceCount = requiredDeviceCount,
@@ -89,6 +92,18 @@ public class ServiceRequest : BaseAggregateRoot
         Geolocation = geolocation;
         Status = ERequestStatus.PropertySelected;
         RaiseDomainEvent(new PropertySelectedForRequestEvent(RequestId, propertyId, geolocation, DateTime.UtcNow));
+    }
+
+    // Subscription installation: the owner's property makes the request ready for the existing matching.
+    public void AttachInstallationProperty(PropertyId propertyId, Geolocation geolocation)
+    {
+        EnsureStatus(ERequestStatus.PendingInstallation);
+        if (SubscriptionId is null || PropertyId is not null)
+            throw new InvalidRequestStatusException(RequestId, ERequestStatus.PendingInstallation, Status);
+        PropertyId = propertyId;
+        Geolocation = geolocation;
+        RequestedCategory = EServiceCategory.Installation;
+        Status = ERequestStatus.PendingAssignment;
     }
 
     public void SelectRecipe(RecipeId recipeId, RecipeSnapshot snapshot)

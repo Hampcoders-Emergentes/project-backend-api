@@ -141,8 +141,10 @@ public class AssetsContextFacade(
 
     public async Task<(double Latitude, double Longitude)?> GetPropertyGeolocationAsync(string propertyId, string ownerId)
     {
-        var prop = await propertyQueryService.Handle(new GetPropertyByIdQuery(PropertyId.From(propertyId), ClientIdentity.FromOwnerId(ownerId)));
-        if (prop is null) return null;
+        // GetPropertyByIdQuery does not filter by owner; compare it here (M3.20).
+        var owner = ClientIdentity.FromOwnerId(ownerId);
+        var prop = await propertyQueryService.Handle(new GetPropertyByIdQuery(PropertyId.From(propertyId), owner));
+        if (prop is null || prop.Owner != owner) return null;
         return (prop.Geolocation.Latitude, prop.Geolocation.Longitude);
     }
 
@@ -155,8 +157,17 @@ public class AssetsContextFacade(
 
     public async Task<bool> PropertyBelongsToOwnerAsync(string propertyId, string ownerId)
     {
-        var prop = await propertyQueryService.Handle(new GetPropertyByIdQuery(PropertyId.From(propertyId), ClientIdentity.FromOwnerId(ownerId)));
-        return prop is not null;
+        var owner = ClientIdentity.FromOwnerId(ownerId);
+        var prop = await propertyQueryService.Handle(new GetPropertyByIdQuery(PropertyId.From(propertyId), owner));
+        return prop is not null && prop.Owner == owner;
+    }
+
+    public async Task<(double Latitude, double Longitude)?> GetActiveOwnedPropertyGeolocationAsync(string propertyId, ClientIdentity owner)
+    {
+        // GetPropertyByIdQuery does not filter by owner; ownership and status are checked here.
+        var prop = await propertyQueryService.Handle(new GetPropertyByIdQuery(PropertyId.From(propertyId), owner));
+        if (prop is null || prop.Owner != owner || !prop.IsActive || prop.Status == EPropertyStatus.Archived) return null;
+        return (prop.Geolocation.Latitude, prop.Geolocation.Longitude);
     }
 
     // ── Portfolio ─────────────────────────────────────────

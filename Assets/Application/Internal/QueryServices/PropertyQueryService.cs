@@ -1,4 +1,4 @@
-using Hampcoders.Electrolink.API.Assets.Domain.Model.Aggregates;
+﻿using Hampcoders.Electrolink.API.Assets.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Assets.Domain.Repositories;
@@ -10,8 +10,9 @@ namespace Hampcoders.Electrolink.API.Assets.Application.Internal.QueryServices;
 
 public class PropertyQueryService(IPropertyRepository propertyRepository) : IPropertyQueryService
 {
+    // Filters by the query's owner (M3.22); previously the owner was ignored.
     public async Task<Property?> Handle(GetPropertyByIdQuery query)
-        => await propertyRepository.FindByIdAsync(query.PropertyId);
+        => await propertyRepository.FindByIdAndOwnerAsync(query.PropertyId, query.Owner);
 
     /// <summary>
     /// Maneja la consulta para obtener una propiedad específica por su ID,

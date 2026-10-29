@@ -21,6 +21,7 @@ public static class WebApplicationBuilderExtensions
         builder.Services.AddScoped<IServiceAssignmentCommandService, ServiceAssignmentCommandService>();
         builder.Services.AddScoped<IServiceRequestCommandService, ServiceRequestCommandService>();
         builder.Services.AddScoped<IServiceCatalogCommandService, ServiceCatalogCommandService>();
+        builder.Services.AddScoped<SubscriptionInstallationPropertyService>();
 
         builder.Services.AddScoped<IServiceDesignQueryService, ServiceDesignQueryService>();
         builder.Services.AddScoped<IServiceSuggestionCommandService, ServiceSuggestionCommandService>();

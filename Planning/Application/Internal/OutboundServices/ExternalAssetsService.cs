@@ -9,6 +9,9 @@ namespace Hampcoders.Electrolink.API.Planning.Application.Internal.OutboundServi
 /// </summary>
 public class ExternalAssetsService(IAssetsContextFacade assetsContextFacade)
 {
+    public async Task<(double Latitude, double Longitude)?> GetActiveOwnedPropertyGeolocationAsync(string propertyId, ClientIdentity owner)
+        => await assetsContextFacade.GetActiveOwnedPropertyGeolocationAsync(propertyId, owner);
+
     public async Task<(double latitude, double longitude)?> GetPropertyGeolocationAsync(string propertyId, string ownerId)
         => await assetsContextFacade.GetPropertyGeolocationAsync(propertyId, ownerId);
     

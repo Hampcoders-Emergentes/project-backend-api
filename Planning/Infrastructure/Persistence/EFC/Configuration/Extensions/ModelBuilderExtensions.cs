@@ -199,7 +199,9 @@ public static class ModelBuilderExtensions
             .HasConversion<string>()
             .HasColumnName("status")
             .HasMaxLength(30)
-            .IsRequired();
+            .IsRequired()
+            // Metadata only (no DDL): competing transitions from the same read status cannot both save.
+            .IsConcurrencyToken();
 
         builder.Entity<ServiceRequest>()
             .Property(r => r.PropertyId)
