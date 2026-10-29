@@ -103,12 +103,6 @@ public interface IAssetsContextFacade
     // ── IoT ── 🆕 ─────────────────────────────────────────
 
     /// <summary>
-    /// Asigna el primer dispositivo IoT disponible (IN_STOCK) a la propiedad indicada.
-    /// Invocado por el handler de IoTInstallationServiceScheduled.
-    /// </summary>
-    Task<string?> AssignAvailableDeviceToPropertyAsync(string propertyId, string installationRequestId);
-
-    /// <summary>
     /// Retorna la cantidad de dispositivos activos (INSTALLED + MAINTENANCE) para facturación.
     /// Invocado por Subscriptions BC al inicio de cada ciclo.
     /// </summary>

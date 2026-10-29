@@ -30,11 +30,6 @@ public class IoTDeviceRepository : BaseRepository<IoTDevice, IoTDeviceId>, IIoTD
             .Where(d => d.Status == EDeviceStatus.Installed || d.Status == EDeviceStatus.Maintenance)
             .CountAsync();
 
-    public async Task<IoTDevice?> FindFirstInStockAsync()
-        => await Context.Set<IoTDevice>()
-            .Where(d => d.Status == EDeviceStatus.InStock)
-            .FirstOrDefaultAsync();
-
     public async Task<Hampcoders.Electrolink.API.Assets.Domain.Model.Queries.TechnicianDeviceStockPage> GetTechnicianStockPageAsync(
         TechnicianId technician, int page, int pageSize)
     {

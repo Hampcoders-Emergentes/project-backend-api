@@ -97,3 +97,10 @@ El usuario corrigió expresamente la propuesta de Admin/SuperAdmin: **el técnic
 Persistencia aditiva: columna nullable stock_technician_id e índice, sin backfill automático. Dispositivos anteriores NULL permanecen intactos y fuera del stock personal/asignación HTTP; no se atribuyen por serial/nombre. El SQL 004 de Assets es **borrador para revisión**, no se ejecutó sobre bases existentes/compartidas. El modelo exportado para destinos nuevos ya incluye columna/índice. Desplegar contra un esquema anterior requiere antes un cambio de esquema autorizado; no se despliega en este corte.
 
 263/263 y 64/64 focalizadas; PostgreSQL real verifica alta→consulta→asignación→instalación, contadores propios, serial concurrente y separación de técnicos; M3.15 se revalida con dos solicitudes del mismo titular. [Informe y recuperación M3.16](../tests/M3.16.md). La selección persistida de Planning/comercial, transferencias/conciliación de stock anterior y validación automática de todos los materiales de un servicio siguen pendientes; el disponible es una consulta informativa, no una garantía/reserva del servicio.
+
+
+## M3.17 — selección solo por HTTP del técnico asignado
+
+Decisión del usuario: **el técnico asignado elige el dispositivo explícitamente mediante el POST assign** (DeviceAssignmentService, stock propio, M3.14–M3.16). Ningún evento interno asigna stock. Se retiraron ServiceAutomaticallyAssignedForIoTEventHandler (Planning), IoTInstallationServiceScheduledEventHandler (Assets), el evento IoTInstallationServiceScheduledExternalEvent con SelectedDeviceId y la fachada AssignAvailableDeviceToPropertyAsync/FindFirstInStockAsync de primer stock global, que no tenían llamadores. La sección M3.14 anterior sobre el puente queda como historia.
+
+Caracterizado, no resuelto: la ServiceRequest creada por la suscripción Enterprise (PendingInstallation) no tiene propiedad, cliente, categoría ni técnico, por lo que no puede emparejarse ni pasar el lector de asignación; y el primer DeviceInstalled activa la suscripción con un dispositivo aunque se requirieran más. [Informe M3.17](../tests/M3.17.md).

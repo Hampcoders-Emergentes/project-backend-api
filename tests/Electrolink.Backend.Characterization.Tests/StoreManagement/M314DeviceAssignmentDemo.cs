@@ -1,14 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Hampcoders.Electrolink.API.Assets.Application.Internal.EventHandlers;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Assets.Domain.Repositories;
-using Hampcoders.Electrolink.API.Assets.Domain.Services;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 namespace Electrolink.Backend.Characterization.Tests.StoreManagement;
 
@@ -34,14 +31,7 @@ public static class M314DeviceAssignmentDemo
         await Denied(path, Body("req-missing-synthetic"), HttpStatusCode.NotFound);
         await Denied(path.Replace(propertyId, wrongPropertyId, StringComparison.Ordinal), Body(request.Value), HttpStatusCode.NotFound);
         await Denied(path.Replace(deviceId, "dev-missing-synthetic", StringComparison.Ordinal), Body(request.Value), HttpStatusCode.NotFound);
-        using (var scope = h.Scope())
-        {
-            var before = await M313DeviceInstallationDemo.Snapshot(h); var events = h.AssetMutationEvents;
-            var bridge = new IoTInstallationServiceScheduledEventHandler(scope.ServiceProvider.GetRequiredService<IIoTDeviceCommandService>(),
-                NullLogger<IoTInstallationServiceScheduledEventHandler>.Instance);
-            await Assert.ThrowsAsync<ArgumentException>(() => bridge.Handle(new(propertyId, request.Value, "", DateTime.UtcNow), default));
-            Assert.True(before == await M313DeviceInstallationDemo.Snapshot(h)); Assert.Equal(events, h.AssetMutationEvents);
-        }
+        // M3.17: the scheduled-event bridge was removed; explicit HTTP assignment is the only device selection path.
         var unrelated = await M313DeviceInstallationDemo.Snapshot(h, includeDevice: false, includeProperties: false);
         var count = h.AssetMutationEvents;
         using (var response = await h.Send(HttpMethod.Post, path, Body(request.Value), otherUser: true))
@@ -67,6 +57,6 @@ public static class M314DeviceAssignmentDemo
         await Denied(path, Body(request.Value), HttpStatusCode.Conflict);
         Assert.Equal(0, h.ForbiddenCalls);
         Console.WriteLine("PASS M3.14 real assignment HTTP: assigned technician only, explicit chosen stock persisted, spare untouched, existing DTO, one event; unrelated/anonymous/Edge/incompatible requests and repeats unchanged");
-        Console.WriteLine("PASS M3.14 empty scheduled selection fails visibly with free stock present and without mutation; continuing existing protected installation checks");
+        Console.WriteLine("PASS M3.14 no scheduled-event assignment path (M3.17); continuing existing protected installation checks");
     }
 }

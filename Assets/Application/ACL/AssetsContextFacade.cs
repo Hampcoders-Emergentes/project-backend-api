@@ -189,17 +189,6 @@ public class AssetsContextFacade(
 
     // ── IoT 🆕 ─────────────────────────────────────────────
 
-    public async Task<string?> AssignAvailableDeviceToPropertyAsync(string propertyId, string installationRequestId)
-    {
-        var device = await deviceRepository.FindFirstInStockAsync();
-        if (device is null) return null;
-
-        await deviceCommandService.Handle(new AssignDeviceToPropertyCommand(
-            device.Id.Value, propertyId, installationRequestId));
-
-        return device.Id.Value;
-    }
-
     public Task<int> GetActiveDeviceCountForBillingAsync(string ownerId)
         => deviceQueryService.Handle(new GetActiveDeviceCountByOwnerIdQuery(ownerId));
 
