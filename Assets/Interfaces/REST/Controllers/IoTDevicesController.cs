@@ -2,6 +2,8 @@ using Hampcoders.Electrolink.API.Assets.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Assets.Application.Internal.CommandServices;
+using Hampcoders.Electrolink.API.Assets.Application.Internal.QueryServices;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using HumanAuthorize = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AuthorizeAttribute;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Assets.Domain.Model.Queries;
@@ -95,10 +97,14 @@ public class IoTDevicesController : ControllerBase
         catch (TechnicianStockAccessDeniedException) { return StatusCode(StatusCodes.Status403Forbidden); }
     }
 
-    [HttpGet("by-property/{propertyId}")]
-    public async Task<IActionResult> GetByPropertyId(string propertyId)
+    [HttpGet("by-property/{propertyId}"), HumanAuthorize]
+    public async Task<IActionResult> GetByPropertyId(string propertyId, [FromServices] IProfilesContextFacade profiles)
     {
-        var devices = await _queryService.Handle(new GetIoTDevicesByPropertyIdQuery(propertyId));
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        var owner = await PropertyOwnerResolver.ResolveAsync(profiles, actor);
+        if (owner is null) return StatusCode(StatusCodes.Status403Forbidden);
+        var devices = await _queryService.Handle(new GetIoTDevicesByOwnedPropertyQuery(owner, propertyId));
+        if (devices is null) return NotFound(new { message = "Resource not found." });
         var resources = devices.Select(IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity);
         return Ok(resources);
     }
@@ -156,27 +162,41 @@ public class IoTDevicesController : ControllerBase
         catch (DeviceInstallationStateException) { return Conflict(new { message = "Device is not awaiting installation." }); }
     }
 
-    [HttpPut("{id}/connection-status")]
-    public async Task<IActionResult> UpdateConnectionStatus(string id, [FromBody] UpdateDeviceConnectionStatusResource resource)
+    // The property owner, or the technician holding the device in stock; anything else looks like a missing device.
+    private async Task<bool> CanManageDeviceAsync(User actor, string id, TechnicianDeviceStockService stock)
     {
+        if (await _queryService.Handle(new GetOwnedIoTDeviceByIdQuery(actor.Id, id)) is not null) return true;
+        try { return await stock.GetDevice(actor.Id, id) is not null; }
+        catch (TechnicianStockAccessDeniedException) { return false; }
+    }
+
+    [HttpPut("{id}/connection-status"), HumanAuthorize]
+    public async Task<IActionResult> UpdateConnectionStatus(string id, [FromBody] UpdateDeviceConnectionStatusResource resource, [FromServices] TechnicianDeviceStockService stock)
+    {
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        if (!await CanManageDeviceAsync(actor, id, stock)) return NotFound(new { message = "Resource not found." });
         var command = new UpdateDeviceConnectionStatusCommand(id, resource.NewConnectionStatus, resource.LastReadingAt);
         var device = await _commandService.Handle(command);
         var deviceResource = IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device);
         return Ok(deviceResource);
     }
 
-    [HttpPut("{id}/maintenance")]
-    public async Task<IActionResult> SendToMaintenance(string id, [FromBody] SendDeviceToMaintenanceResource resource)
+    [HttpPut("{id}/maintenance"), HumanAuthorize]
+    public async Task<IActionResult> SendToMaintenance(string id, [FromBody] SendDeviceToMaintenanceResource resource, [FromServices] TechnicianDeviceStockService stock)
     {
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        if (!await CanManageDeviceAsync(actor, id, stock)) return NotFound(new { message = "Resource not found." });
         var command = new SendDeviceToMaintenanceCommand(id, resource.Reason, resource.ExpectedReturnDate);
         var device = await _commandService.Handle(command);
         var deviceResource = IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device);
         return Ok(deviceResource);
     }
 
-    [HttpPut("{id}/reinstall")]
-    public async Task<IActionResult> Reinstall(string id, [FromBody] ReinstallDeviceResource resource)
+    [HttpPut("{id}/reinstall"), HumanAuthorize]
+    public async Task<IActionResult> Reinstall(string id, [FromBody] ReinstallDeviceResource resource, [FromServices] TechnicianDeviceStockService stock)
     {
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        if (!await CanManageDeviceAsync(actor, id, stock)) return NotFound(new { message = "Resource not found." });
         var command = new ReinstallDeviceCommand(id, resource.TechnicianId, resource.FirmwareVersion, resource.ReinstalledAt);
         var device = await _commandService.Handle(command);
         var deviceResource = IoTDeviceResourceFromEntityAssembler.ToResourceFromEntity(device);

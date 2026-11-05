@@ -52,7 +52,7 @@ public class GeminiMatchingProvider : IAIMatchingProvider
             }
         };
 
-        var url = $"https://generativelanguage.googleapis.com/v1/models/{_settings.ModelId}:generateContent?key={_settings.ApiKey}";
+        var url = $"https://generativelanguage.googleapis.com/v1/models/{_settings.ModelId}:generateContent";
 
         for (var attempt = 1; attempt <= 3; attempt++)
         {
@@ -61,7 +61,13 @@ public class GeminiMatchingProvider : IAIMatchingProvider
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 cts.CancelAfter(TimeSpan.FromSeconds(_settings.TimeoutSeconds));
 
-                var response = await _httpClient.PostAsJsonAsync(url, requestBody, JsonOptions, cts.Token);
+                using var request = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = JsonContent.Create(requestBody, options: JsonOptions)
+                };
+                request.Headers.Add("x-goog-api-key", _settings.ApiKey);
+
+                var response = await _httpClient.SendAsync(request, cts.Token);
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorBody = await response.Content.ReadAsStringAsync(cts.Token);

@@ -1,3 +1,5 @@
+using MediatR;
+
 namespace Hampcoders.Electrolink.API.Processing.Domain.Model.Commands;
 
 public record IngestDeviceReadingCommand(
@@ -9,4 +11,4 @@ public record IngestDeviceReadingCommand(
     float   PowerFactor,
     float   Frequency,
     string  Source
-);
+) : IRequest<bool>;

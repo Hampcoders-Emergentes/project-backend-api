@@ -1,4 +1,5 @@
 ﻿using System.Net.Mime;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Planning.Domain.Model.ValueObjects;
@@ -10,6 +11,7 @@ using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
+using RequireAccessRole = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.RequireAccessRoleAttribute;
 
 namespace Hampcoders.Electrolink.API.Planning.Interfaces.REST;
 
@@ -49,6 +51,7 @@ public class ServiceAssignmentController : ControllerBase
     /// Uso: panel de administración y monitoreo del proceso de asignación.
     /// </summary>
     [HttpGet("queue")]
+    [RequireAccessRole(AccessRole.Admin, AccessRole.SuperAdmin, AccessRole.FieldManager)]
     [ProducesResponseType(typeof(MatchingQueueResource), StatusCodes.Status200OK)]
     public async Task<ActionResult<MatchingQueueResource>> GetMatchingQueue(
         [FromQuery] int page = 1,
@@ -89,6 +92,7 @@ public class ServiceAssignmentController : ControllerBase
     /// status FAILED y retryCount incrementado).
     /// </summary>
     [HttpPost("execute")]
+    [RequireAccessRole(AccessRole.Admin, AccessRole.SuperAdmin, AccessRole.FieldManager)]
     [ProducesResponseType(typeof(MatchingResultResource), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MatchingResultResource), StatusCodes.Status422UnprocessableEntity)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

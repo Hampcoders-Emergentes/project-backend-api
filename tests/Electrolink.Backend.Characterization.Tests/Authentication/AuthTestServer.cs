@@ -45,7 +45,7 @@ internal sealed class AuthTestServer : IDisposable
     private readonly TestServer server;
     private readonly HttpClient client;
 
-    internal AuthTestServer(AccessRole role = AccessRole.Admin, bool userExists = true, string? edgeKey = EdgeKey, IIoTMonitoringQueryService? monitoringQueries = null, IEnumerable<string?>? historyAllowedDevices = null, bool configureHistoryScope = true)
+    internal AuthTestServer(AccessRole role = AccessRole.Admin, bool userExists = true, string? edgeKey = EdgeKey, IIoTMonitoringQueryService? monitoringQueries = null, IEnumerable<string?>? historyAllowedDevices = null, bool configureHistoryScope = true, IDeviceAccessService? deviceAccess = null)
     {
         Human = User.Create(Email.From("m02@example.invalid"), HashedPassword.FromHash("synthetic-unused-hash"), role);
         Tokens = new TokenService(Options.Create(new TokenSettings { Secret = Secret }), NullLogger<TokenService>.Instance);
@@ -65,6 +65,7 @@ internal sealed class AuthTestServer : IDisposable
             .ConfigureServices(services =>
             {
                 services.AddSingleton<ITokenService>(Tokens);
+                services.AddSingleton<IDeviceAccessService>(deviceAccess ?? new DeviceAccessStub());
                 services.AddSingleton<IUserQueryService>(new UserQueryStub(userExists ? Human : null));
                 services.AddRouting(options => options.LowercaseUrls = true);
                 services.AddControllers(options =>
@@ -175,6 +176,15 @@ internal sealed class AuthTestServer : IDisposable
         public Task<User?> Handle(GetUserByIdQuery query) => Task.FromResult(user?.Id.Value == query.UserId ? user : null);
         public Task<IEnumerable<User>> Handle(GetAllUsersQuery query) => throw new InvalidOperationException("Unexpected user listing");
         public Task<User?> Handle(GetUserByEmailQuery query) => throw new InvalidOperationException("Unexpected email lookup");
+    }
+
+    // Grants the listed devices, or every device when none is listed.
+    internal sealed class DeviceAccessStub(params string[] allowedDevices) : IDeviceAccessService
+    {
+        public Task<bool> CanAccessDeviceAsync(string userId, string deviceId) =>
+            Task.FromResult(allowedDevices.Length == 0 || allowedDevices.Contains(deviceId));
+        public Task<bool> CanAccessAnomalyAsync(string userId, string anomalyId) => throw new InvalidOperationException("Unexpected anomaly access check");
+        public Task<IReadOnlyList<AnomalyRecord>> FilterVisibleAnomaliesAsync(string userId, string propertyId, IEnumerable<AnomalyRecord> anomalies) => throw new InvalidOperationException("Unexpected anomaly filter");
     }
 
     private sealed class UnexpectedAnomalyService : IAnomalyCommandService

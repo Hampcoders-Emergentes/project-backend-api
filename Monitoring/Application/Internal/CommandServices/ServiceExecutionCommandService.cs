@@ -57,6 +57,7 @@ public class ServiceExecutionCommandService(
     public async Task<ServiceExecution> Handle(UploadWorkPhotoCommand command)
     {
         var execution = await GetOrThrowAsync(command.ExecutionId);
+        execution.EnsureTechnicianOwnership(command.TechnicianId);
 
         if (!Enum.TryParse<EPhotoType>(command.PhotoType.ToString(), true, out var photoType))
             throw new ArgumentException($"Invalid photo type: {command.PhotoType}");
@@ -80,6 +81,7 @@ public class ServiceExecutionCommandService(
     public async Task<ServiceExecution> Handle(RegisterWorkPhotoCommand command)
     {
         var execution = await GetOrThrowAsync(command.ExecutionId);
+        execution.EnsureTechnicianOwnership(command.TechnicianId);
 
         try
         {
@@ -111,6 +113,7 @@ public class ServiceExecutionCommandService(
     public async Task<SignedUploadData> Handle(GetWorkPhotoUploadUrlCommand command)
     {
         var execution = await GetOrThrowAsync(command.ExecutionId);
+        execution.EnsureTechnicianOwnership(command.TechnicianId);
 
         return await fileStorageService.GetSignedUploadUrlForWorkPhotoAsync(execution.Id.Value, command.PhotoType.ToString());
     }
@@ -118,6 +121,7 @@ public class ServiceExecutionCommandService(
     public async Task<ServiceExecution> Handle(RecordComponentsUsedCommand command)
     {
         var execution = await GetOrThrowAsync(command.ExecutionId);
+        execution.EnsureTechnicianOwnership(command.TechnicianId);
 
         var records = command.ComponentsUsed.Select(dto =>
             ComponentUsageRecord.Create(
@@ -139,6 +143,7 @@ public class ServiceExecutionCommandService(
     public async Task<ServiceExecution> Handle(UpdateTechnicalReportCommand command)
     {
         var execution = await GetOrThrowAsync(command.ExecutionId);
+        execution.EnsureTechnicianOwnership(command.TechnicianId);
 
         execution.UpdateTechnicalReport(
             command.ReportContent, command.Findings,

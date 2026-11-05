@@ -2,6 +2,7 @@ using System.Net.Mime;
 using System.Security.Claims;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Queries;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.IAM.Domain.Services;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes;
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Resources;
@@ -43,6 +44,7 @@ public class UsersController(IUserQueryService userQueryService, IUserCommandSer
     }
 
     [HttpGet]
+    [RequireAccessRole(AccessRole.Admin, AccessRole.SuperAdmin)]
     [SwaggerOperation(
         Summary = "Get all users",
         Description = "Get all users with pagination",

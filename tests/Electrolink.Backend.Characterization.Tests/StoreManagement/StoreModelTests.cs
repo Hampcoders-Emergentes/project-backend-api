@@ -55,7 +55,7 @@ public sealed class StoreModelTests
         Assert.False(context.Model.FindEntityType(typeof(Store))!.FindProperty(nameof(Store.OwnerUserId))!.IsNullable);
         Assert.DoesNotContain("public.", sql);
         // Offline DDL only: this never opens the deliberately unusable synthetic connection.
-        File.WriteAllText("/private/tmp/electrolink-m31-create-schema.sql", sql);
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "electrolink-m31-create-schema.sql"), sql);
     }
     [Fact]
     public void Ownership_and_parent_queries_translate_to_postgresql_without_connecting()

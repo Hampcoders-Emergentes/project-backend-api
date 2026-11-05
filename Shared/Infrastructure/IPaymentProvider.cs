@@ -12,6 +12,7 @@ public record SubscriptionStatus(
 public record RefundResult(string RefundId);
 public record CustomerPortalUrl(string Url);
 public record WebhookEvent(
+    string EventId,
     string EventType,
     string? SubscriptionId,
     string? CustomerId,

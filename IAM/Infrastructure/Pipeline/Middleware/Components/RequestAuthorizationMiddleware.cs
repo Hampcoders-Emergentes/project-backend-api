@@ -30,7 +30,7 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
         {
             var config = context.RequestServices.GetRequiredService<IConfiguration>();
             var configuredKey = config["EdgeApi:ApiKey"];
-            if (!string.IsNullOrEmpty(configuredKey) && apiKey == configuredKey)
+            if (EdgeApiKeyComparer.Matches(apiKey, configuredKey))
             {
                 context.Features.Set(new EdgeApiKeyAuthenticationFeature());
                 await next(context);

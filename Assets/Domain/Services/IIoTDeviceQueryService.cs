@@ -10,6 +10,8 @@ public interface IIoTDeviceQueryService
     Task<IoTDevice?> Handle(GetIoTDeviceBySerialNumberQuery query);
     Task<IEnumerable<IoTDevice>> Handle(GetAllIoTDevicesQuery query);
     Task<IEnumerable<IoTDevice>> Handle(GetIoTDevicesByPropertyIdQuery query);
+    // Null when the property is missing or belongs to another owner.
+    Task<IEnumerable<IoTDevice>?> Handle(GetIoTDevicesByOwnedPropertyQuery query);
     Task<IEnumerable<IoTDevice>> Handle(GetIoTDevicesByStatusQuery query);
     Task<int> Handle(GetActiveDeviceCountByOwnerIdQuery query);
 }

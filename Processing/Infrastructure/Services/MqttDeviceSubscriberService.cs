@@ -13,7 +13,7 @@ namespace Hampcoders.Electrolink.API.Processing.Infrastructure.Services;
 
 public class MqttDeviceSubscriberService : BackgroundService, IMqttSubscriptionService
 {
-    private readonly IMediator _mediator;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MqttDeviceSubscriberService> _logger;
     private readonly MqttConfiguration _settings;
     private IMqttClient _mqttClient;
@@ -28,10 +28,10 @@ public class MqttDeviceSubscriberService : BackgroundService, IMqttSubscriptionS
 
     public MqttDeviceSubscriberService(
         IOptions<MqttConfiguration> settings,
-        IMediator mediator,
+        IServiceScopeFactory scopeFactory,
         ILogger<MqttDeviceSubscriberService> logger)
     {
-        _mediator = mediator;
+        _scopeFactory = scopeFactory;
         _logger = logger;
         _settings = settings.Value;
     }
@@ -122,7 +122,7 @@ public class MqttDeviceSubscriberService : BackgroundService, IMqttSubscriptionS
                 var telemetry = JsonSerializer.Deserialize<IngestDeviceReadingCommand>(payload,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (telemetry != null)
-                    await _mediator.Send(telemetry);
+                    await SendInMessageScopeAsync(telemetry);
 
                 if (OnTelemetryReceived != null)
                     await OnTelemetryReceived.Invoke(
@@ -133,7 +133,7 @@ public class MqttDeviceSubscriberService : BackgroundService, IMqttSubscriptionS
                 var anomaly = JsonSerializer.Deserialize<ReportEdgeAnomalyCommand>(payload,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (anomaly != null)
-                    await _mediator.Send(anomaly);
+                    await SendInMessageScopeAsync(anomaly);
 
                 if (OnAnomalyReceived != null)
                     await OnAnomalyReceived.Invoke(
@@ -146,7 +146,7 @@ public class MqttDeviceSubscriberService : BackgroundService, IMqttSubscriptionS
                 if (status != null && status.TryGetValue("status", out var deviceStatus))
                 {
                     if (deviceStatus == "disconnected" || deviceStatus == "offline")
-                        await _mediator.Send(new MarkDeviceAsDisconnectedCommand(deviceId));
+                        await SendInMessageScopeAsync(new MarkDeviceAsDisconnectedCommand(deviceId));
                 }
 
                 if (OnStatusReceived != null)
@@ -158,7 +158,7 @@ public class MqttDeviceSubscriberService : BackgroundService, IMqttSubscriptionS
                 var response = JsonSerializer.Deserialize<AcknowledgeRelayExecutionCommand>(payload,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (response != null)
-                    await _mediator.Send(response);
+                    await SendInMessageScopeAsync(response);
 
                 if (OnCommandResponse != null)
                     await OnCommandResponse.Invoke(
@@ -167,12 +167,22 @@ public class MqttDeviceSubscriberService : BackgroundService, IMqttSubscriptionS
         }
     }
 
+    // This service is a singleton, so a mediator it held directly would resolve handlers and their scoped DbContext from the root provider.
+    private async Task SendInMessageScopeAsync<TResponse>(IRequest<TResponse> command)
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        await mediator.Send(command);
+    }
+
     private async Task ConnectWithRetryAsync(CancellationToken ct)
     {
         var options = new MqttClientOptionsBuilder()
             .WithTcpServer(_settings.Host, _settings.Port)
-            .WithClientId($"{_settings.ClientId}-{Guid.NewGuid():N}")
-            .WithCleanSession()
+            .WithClientId(_settings.ClientId)
+            .WithCleanSession(false)
+            // MQTT 5 (the MQTTnet default) ends the session on disconnect unless an expiry is set.
+            .WithSessionExpiryInterval(_settings.SessionExpirySeconds)
             .WithKeepAlivePeriod(TimeSpan.FromSeconds(30));
 
         if (!string.IsNullOrEmpty(_settings.Username))
@@ -180,7 +190,6 @@ public class MqttDeviceSubscriberService : BackgroundService, IMqttSubscriptionS
 
         if (_settings.UseTls)
             options.WithTlsOptions(o => o
-                .WithCertificateValidationHandler(_ => true)
                 .WithSslProtocols(System.Security.Authentication.SslProtocols.Tls12));
 
         var max = _settings.MaxReconnectAttempts;

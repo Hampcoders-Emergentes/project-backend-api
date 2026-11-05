@@ -479,7 +479,7 @@ public class ServiceExecution : BaseAggregateRoot, IExecutable
                 $"Transition from {Status} via {action} is not valid.");
     }
 
-    private void EnsureTechnicianOwnership(TechnicianId technicianId)
+    public void EnsureTechnicianOwnership(TechnicianId technicianId)
     {
         if (TechnicianId != technicianId)
             throw new UnauthorizedAccessException(

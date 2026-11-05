@@ -64,8 +64,16 @@ public class DeviceReadingStreamCommandService(
         await unitOfWork.CompleteAsync();
         await PublishAndClearEvents(stream);
 
-        _ = anomalyService.Handle(new EvaluateReadingForAnomaliesCommand(
-            stream.StreamId.Value, command.ReadingId));
+        // Awaited because the service shares this scope's DbContext, which is disposed with it; the reading is already saved.
+        try
+        {
+            await anomalyService.Handle(new EvaluateReadingForAnomaliesCommand(
+                stream.StreamId.Value, command.ReadingId));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[IoT] Anomaly evaluation failed for reading {ReadingId}.", command.ReadingId);
+        }
 
         return true;
     }

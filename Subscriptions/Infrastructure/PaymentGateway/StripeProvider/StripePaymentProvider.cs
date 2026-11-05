@@ -23,6 +23,10 @@ public class StripePaymentProvider : IPaymentProvider
         _client = new StripeClient(_settings.SecretKey);
     }
 
+    // Stripe takes integer minor units; rounding first stops a sub-cent amount from being silently truncated by the cast.
+    public static long ToCents(decimal amount) =>
+        (long)decimal.Round(amount * 100m, 0, MidpointRounding.AwayFromZero);
+
     public async Task<ExternalCustomerId> CreateCustomerAsync(
         string email, string name,
         IReadOnlyDictionary<string, string>? metadata = null)
@@ -92,7 +96,7 @@ public class StripePaymentProvider : IPaymentProvider
                         PriceData = new Stripe.Checkout.SessionLineItemPriceDataOptions
                         {
                             Currency = "usd",
-                            UnitAmountDecimal = pricePerDevice * 100m,
+                            UnitAmount = ToCents(pricePerDevice),
                             ProductData = new Stripe.Checkout.SessionLineItemPriceDataProductDataOptions
                             {
                                 Name = "Enterprise per-device fee"
@@ -155,7 +159,7 @@ public class StripePaymentProvider : IPaymentProvider
             var options = new RefundCreateOptions
             {
                 PaymentIntent = paymentIntentId,
-                Amount = amount.HasValue ? (long?)(amount.Value * 100m) : null,
+                Amount = amount.HasValue ? ToCents(amount.Value) : null,
                 Reason = reason switch
                 {
                     "requested_by_customer" => RefundReasons.RequestedByCustomer,
@@ -222,6 +226,7 @@ public class StripePaymentProvider : IPaymentProvider
             }
 
             return Task.FromResult(new WebhookEvent(
+                stripeEvent.Id,
                 stripeEvent.Type,
                 subId,
                 cusId,
@@ -232,6 +237,5 @@ public class StripePaymentProvider : IPaymentProvider
         catch (StripeException ex)
         {
             throw new PaymentProviderException("Stripe", "Webhook signature validation failed", ex, ex.StripeError?.Code);
-        }
-    }
+        }    }
 }

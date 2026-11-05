@@ -2,6 +2,8 @@ using System.Net.Mime;
 using Hampcoders.Electrolink.API.Analytics.Domain.Services;
 using Hampcoders.Electrolink.API.Analytics.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Analytics.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 
@@ -14,6 +16,7 @@ namespace Hampcoders.Electrolink.API.Analytics.Interfaces.REST;
 public class AlertLogController(
     IAlertLogQueryService queryService,
     IAlertLogCommandService commandService,
+    IProfilesContextFacade profiles,
     ILogger<AlertLogController> logger)
     : ControllerBase
 {
@@ -26,6 +29,9 @@ public class AlertLogController(
     [SwaggerResponse(StatusCodes.Status404NotFound, "Alert log not found")]
     public async Task<IActionResult> GetAlertHistory(string homeownerId)
     {
+        var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
+        if (denied is not null) return denied;
+
         var log = await queryService.GetAlertHistoryAsync(homeownerId);
         if (log == null)
             return NotFound(new { message = "No alert log found for the given homeowner." });
@@ -44,6 +50,9 @@ public class AlertLogController(
     public async Task<IActionResult> AcknowledgeAlert(
         string homeownerId, [FromBody] AcknowledgeAlertResource resource)
     {
+        var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
+        if (denied is not null) return denied;
+
         try
         {
             await commandService.AcknowledgeAlertAsync(homeownerId, resource.EntryId);
@@ -65,6 +74,9 @@ public class AlertLogController(
     public async Task<IActionResult> LinkAlertToService(
         string homeownerId, [FromBody] LinkAlertToServiceResource resource)
     {
+        var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
+        if (denied is not null) return denied;
+
         try
         {
             await commandService.LinkAlertToServiceRequestAsync(

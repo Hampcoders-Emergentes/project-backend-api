@@ -28,10 +28,12 @@ public record DeviceOnboardingAnalysis(
 public interface IDeviceOnboardingService
 {
     Task<DeviceOnboardingAnalysis> AnalyzeAsync(
+        string ownerUserId,
         AnalyzeDeviceOnboardingRequest request,
         CancellationToken cancellationToken = default);
 
     Task<DeviceOnboardingAnalysis> AdjustAnalysisAsync(
+        string ownerUserId,
         string analysisId,
         string userMessage,
         CancellationToken cancellationToken = default);

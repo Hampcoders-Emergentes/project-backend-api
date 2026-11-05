@@ -48,7 +48,7 @@ public class CleanupOrphanedFilesJob : BackgroundService
 
             try
             {
-                var deleted = await fileStorageProvider.DeleteAsync(orphanedFile.ProviderId);
+                var deleted = await fileStorageProvider.DeleteAsync(orphanedFile.ProviderId, orphanedFile.Folder);
 
                 if (deleted)
                 {

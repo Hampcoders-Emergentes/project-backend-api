@@ -1,10 +1,10 @@
-using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.Profiles.Domain.Services;
 using Hampcoders.Electrolink.API.Profiles.Infrastructure.ExternalProviders;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
 namespace Hampcoders.Electrolink.API.Profiles.Application.Internal.CommandServices;
@@ -12,6 +12,7 @@ namespace Hampcoders.Electrolink.API.Profiles.Application.Internal.CommandServic
 public class DeviceOnboardingService(
     IHttpClientFactory httpClientFactory,
     IOptions<ProfilesAISettings> settings,
+    IMemoryCache sessions,
     ILogger<DeviceOnboardingService> logger)
     : IDeviceOnboardingService
 {
@@ -21,9 +22,17 @@ public class DeviceOnboardingService(
         WriteIndented = false
     };
 
-    private static readonly ConcurrentDictionary<string, AnalyzeDeviceOnboardingRequest> Sessions = new();
+    private static readonly MemoryCacheEntryOptions SessionLifetime = new()
+    {
+        SlidingExpiration = TimeSpan.FromMinutes(30),
+        AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(2)
+    };
+
+    // Keyed by owner too: another user's analysis id simply finds no session.
+    private static string SessionKey(string ownerUserId, string analysisId) => $"device-onboarding:{ownerUserId}:{analysisId}";
 
     public async Task<DeviceOnboardingAnalysis> AnalyzeAsync(
+        string ownerUserId,
         AnalyzeDeviceOnboardingRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -34,17 +43,18 @@ public class DeviceOnboardingService(
                        ?? DefaultAnalysis(request);
 
         var analysisId = Guid.NewGuid().ToString();
-        Sessions[analysisId] = request;
+        sessions.Set(SessionKey(ownerUserId, analysisId), request, SessionLifetime);
 
         return analysis with { AnalysisId = analysisId };
     }
 
     public async Task<DeviceOnboardingAnalysis> AdjustAnalysisAsync(
+        string ownerUserId,
         string analysisId,
         string userMessage,
         CancellationToken cancellationToken = default)
     {
-        if (!Sessions.TryGetValue(analysisId, out var request))
+        if (!sessions.TryGetValue(SessionKey(ownerUserId, analysisId), out AnalyzeDeviceOnboardingRequest? request) || request is null)
             throw new KeyNotFoundException("Sesión de análisis no encontrada");
 
         var prompt = await File.ReadAllTextAsync(settings.Value.SystemPromptPath, cancellationToken);

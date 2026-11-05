@@ -228,6 +228,9 @@ public class ProfilesController(
         [FromRoute] string profileId,
         [FromBody] SetThresholdsResource resource)
     {
+        var claims = await profilesContextFacade.GetProfileClaimsAsync(UserId);
+        if (claims?.ProfileId != profileId) return NotFound(new { message = "Resource not found." });
+
         await profilesContextFacade.SetConsumptionThresholdsAsync(profileId, resource.Thresholds);
         return NoContent();
     }

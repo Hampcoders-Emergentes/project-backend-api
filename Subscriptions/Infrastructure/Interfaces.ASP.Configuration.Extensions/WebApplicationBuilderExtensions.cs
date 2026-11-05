@@ -22,6 +22,7 @@ public static class WebApplicationBuilderExtensions
         builder.Services.Configure<SubscriptionSettings>(builder.Configuration.GetSection("Stripe"));
 
         builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+        builder.Services.AddScoped<IWebhookEventInbox, WebhookEventInbox>();
 
         builder.Services.AddScoped<ISubscriptionCommandService, SubscriptionCommandService>();
         builder.Services.AddScoped<ISubscriptionQueryService, SubscriptionQueryService>();

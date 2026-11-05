@@ -1,3 +1,5 @@
+using MediatR;
+
 namespace Hampcoders.Electrolink.API.Processing.Domain.Model.Commands;
 
 public record ReportEdgeAnomalyCommand(
@@ -5,4 +7,4 @@ public record ReportEdgeAnomalyCommand(
     string  AnomalyType,
     string  TriggerReadingId,
     string  EdgeAlertPayloadJson
-);
+) : IRequest;

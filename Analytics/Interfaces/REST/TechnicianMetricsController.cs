@@ -2,6 +2,8 @@ using System.Net.Mime;
 using Hampcoders.Electrolink.API.Analytics.Domain.Services;
 using Hampcoders.Electrolink.API.Analytics.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Analytics.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 
@@ -14,6 +16,7 @@ namespace Hampcoders.Electrolink.API.Analytics.Interfaces.REST;
 public class TechnicianMetricsController(
     ITechnicianMetricsQueryService queryService,
     ITechnicianMetricsCommandService commandService,
+    IProfilesContextFacade profiles,
     ILogger<TechnicianMetricsController> logger)
     : ControllerBase
 {
@@ -26,6 +29,9 @@ public class TechnicianMetricsController(
     [SwaggerResponse(StatusCodes.Status404NotFound, "Metrics not found")]
     public async Task<IActionResult> GetPerformanceDashboard(string technicianId)
     {
+        var denied = await this.DenyUnlessTechnicianAsync(profiles, technicianId);
+        if (denied is not null) return denied;
+
         var metrics = await queryService.GetPerformanceDashboardAsync(technicianId);
         if (metrics == null)
             return NotFound(new { message = "No metrics found for the given technician." });
@@ -42,6 +48,9 @@ public class TechnicianMetricsController(
     [SwaggerResponse(StatusCodes.Status200OK, "Period initialized")]
     public async Task<IActionResult> InitializePeriod(string technicianId)
     {
+        var denied = await this.DenyUnlessTechnicianAsync(profiles, technicianId);
+        if (denied is not null) return denied;
+
         await commandService.InitializeTechnicianMetricsPeriodAsync(technicianId);
         return Ok(new { message = "Technician metrics period initialized." });
     }

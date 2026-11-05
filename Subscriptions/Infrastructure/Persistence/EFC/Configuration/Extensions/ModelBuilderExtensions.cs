@@ -16,5 +16,6 @@ public static class ModelBuilderExtensions
     {
         builder.ApplyConfiguration(new SubscriptionConfiguration());
         builder.ApplyConfiguration(new PaymentRecordConfiguration());
+        builder.ApplyConfiguration(new ProcessedWebhookEventConfiguration());
     }
 }

@@ -1,7 +1,7 @@
-using System.Security.Claims;
 using Hampcoders.Electrolink.API.Processing.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Processing.Domain.Services;
 using Hampcoders.Electrolink.API.Processing.Interfaces.REST.Resources;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 
@@ -23,8 +23,8 @@ public class RelayControlController(IRelayCommandService relayService) : Control
     {
         try
         {
-            var technicianId = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                               ?? throw new UnauthorizedAccessException("Technician identity not found.");
+            // The JWT subject is a user id; relay authorization is keyed by the technician's role subject.
+            var technicianId = User.GetTechnicianId();
 
             var command = new IssueRelayCommandCommand(
                 deviceId, resource.PropertyId, technicianId,

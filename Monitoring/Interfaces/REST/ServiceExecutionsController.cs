@@ -1,9 +1,13 @@
-﻿using Hampcoders.Electrolink.API.Monitoring.Domain.Model.Commands;
+﻿using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes;
+using Hampcoders.Electrolink.API.Monitoring.Domain.Model.Aggregates;
+using Hampcoders.Electrolink.API.Monitoring.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Monitoring.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Monitoring.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Monitoring.Domain.Services;
 using Hampcoders.Electrolink.API.Monitoring.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Monitoring.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
@@ -15,14 +19,32 @@ namespace Hampcoders.Electrolink.API.Monitoring.Interfaces.REST;
 [Produces("application/json")]
 public class ServiceExecutionsController(
     IServiceExecutionCommandService commandService,
-    IServiceExecutionQueryService queryService) : ControllerBase
+    IServiceExecutionQueryService queryService,
+    IProfilesContextFacade profiles) : ControllerBase
 {
-    private string ResolveTechnicianId(string technicianId)
+    // Visible only to its assigned technician and its client.
+    private async Task<(ServiceExecution? Execution, ActionResult? Denied)> FindVisibleExecutionAsync(string executionId)
     {
-        if (technicianId == "me") return User.GetTechnicianId();
-        return technicianId;
+        var (subject, denied) = await this.ResolveSubjectAsync(profiles);
+        if (denied is not null) return (null, denied);
+
+        var execution = await queryService.Handle(new GetServiceExecutionByIdQuery(ServiceExecutionId.From(executionId)));
+        return execution is not null && (subject!.IsTechnician(execution.TechnicianId) || subject.IsClient(execution.Owner))
+            ? (execution, null)
+            : (null, this.ResourceNotFound());
     }
+
+    private async Task<(TechnicianId? Technician, ActionResult? Denied)> AuthorizeTechnicianRouteAsync(string technicianId)
+    {
+        var (subject, denied) = await this.ResolveSubjectAsync(profiles);
+        if (denied is not null) return (null, denied);
+        if (subject!.Technician is null) return (null, StatusCode(StatusCodes.Status403Forbidden));
+        if (technicianId != "me" && !subject.IsTechnician(technicianId)) return (null, this.ResourceNotFound());
+        return (subject.Technician, null);
+    }
+
     [HttpPost]
+    [RequireAccessRole(AccessRole.Admin, AccessRole.SuperAdmin, AccessRole.FieldManager)]
     [ProducesResponseType(typeof(ServiceExecutionResource), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ServiceExecutionResource>> CreateServiceExecution(
@@ -47,9 +69,9 @@ public class ServiceExecutionsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ServiceExecutionResource>> GetServiceExecutionById(string executionId)
     {
-        var execution = await queryService.Handle(new GetServiceExecutionByIdQuery(ServiceExecutionId.From(executionId)));
-        if (execution is null) return NotFound(new { message = $"ServiceExecution {executionId} not found." });
-        return Ok(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity(execution));
+        var (execution, denied) = await FindVisibleExecutionAsync(executionId);
+        if (denied is not null) return denied;
+        return Ok(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity(execution!));
     }
 
     [HttpGet("{executionId}/work-log")]
@@ -57,16 +79,18 @@ public class ServiceExecutionsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<WorkLogResource>> GetWorkLog(string executionId)
     {
-        var execution = await queryService.Handle(new GetServiceExecutionByIdQuery(ServiceExecutionId.From(executionId)));
-        if (execution is null) return NotFound(new { message = $"ServiceExecution {executionId} not found." });
-        return Ok(ServiceExecutionResourceFromEntityAssembler.ToWorkLogResourceFromEntity(execution));
+        var (execution, denied) = await FindVisibleExecutionAsync(executionId);
+        if (denied is not null) return denied;
+        return Ok(ServiceExecutionResourceFromEntityAssembler.ToWorkLogResourceFromEntity(execution!));
     }
 
     [HttpGet("technicians/{technicianId}/assigned")]
     [ProducesResponseType(typeof(IEnumerable<ServiceExecutionResource>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<ServiceExecutionResource>>> GetAssignedByTechnician(string technicianId)
     {
-        var executions = await queryService.Handle(new GetAssignedServicesByTechnicianQuery(TechnicianId.From(ResolveTechnicianId(technicianId))));
+        var (technician, denied) = await AuthorizeTechnicianRouteAsync(technicianId);
+        if (denied is not null) return denied;
+        var executions = await queryService.Handle(new GetAssignedServicesByTechnicianQuery(technician!));
         return Ok(executions.Select(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity));
     }
 
@@ -74,6 +98,8 @@ public class ServiceExecutionsController(
     [ProducesResponseType(typeof(IEnumerable<ServiceExecutionResource>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<ServiceExecutionResource>>> GetHistoryByHomeowner(string homeownerId)
     {
+        var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
+        if (denied is not null) return denied;
         var executions = await queryService.Handle(new GetServiceHistoryByClientQuery(ClientIdentity.FromOwnerId(homeownerId)));
         return Ok(executions.Select(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity));
     }
@@ -82,7 +108,9 @@ public class ServiceExecutionsController(
     [ProducesResponseType(typeof(IEnumerable<ServiceExecutionResource>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<ServiceExecutionResource>>> GetHistoryByTechnician(string technicianId)
     {
-        var executions = await queryService.Handle(new GetServiceHistoryByTechnicianQuery(TechnicianId.From(ResolveTechnicianId(technicianId))));
+        var (technician, denied) = await AuthorizeTechnicianRouteAsync(technicianId);
+        if (denied is not null) return denied;
+        var executions = await queryService.Handle(new GetServiceHistoryByTechnicianQuery(technician!));
         return Ok(executions.Select(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity));
     }
 
@@ -91,6 +119,8 @@ public class ServiceExecutionsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ServiceExecutionResource>> GetActiveByHomeowner(string homeownerId)
     {
+        var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
+        if (denied is not null) return denied;
         var execution = await queryService.Handle(new GetActiveServiceByClientQuery(ClientIdentity.FromOwnerId(homeownerId)));
         if (execution is null) return NotFound(new { message = "No active service found for this homeowner." });
         return Ok(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity(execution));

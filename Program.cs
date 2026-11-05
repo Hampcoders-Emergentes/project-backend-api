@@ -50,19 +50,14 @@ if (connectionString == null) throw new InvalidOperationException("Connection st
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseNpgsql(connectionString, o =>
-    {
-        o.UseNetTopologySuite();
-    });
-    
+    options.UseNpgsql(connectionString, o => o.UseNetTopologySuite());
+
     if (builder.Environment.IsDevelopment())
-        options.UseNpgsql(connectionString, o => o.UseNetTopologySuite())
-            .LogTo(Console.WriteLine, LogLevel.Information)
+        options.LogTo(Console.WriteLine, LogLevel.Information)
             .EnableSensitiveDataLogging()
             .EnableDetailedErrors();
     else
-        options.UseNpgsql(connectionString, o => o.UseNetTopologySuite())
-            .LogTo(Console.WriteLine, LogLevel.Error);
+        options.LogTo(Console.WriteLine, LogLevel.Error);
 });
 
 builder.AddStoreManagementContextService(connectionString);
@@ -200,7 +195,16 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
+builder.Logging.AddConsole();
+
 var app = builder.Build();
+
+// The edge allowlists fail closed, so an empty one would otherwise surface only as 403s at request time.
+foreach (var allowlistKey in new[] { "EdgeApi:EquipmentReadings:AllowedDeviceIds", "EdgeApi:RelayHistory:AllowedDeviceIds" })
+{
+    if (!app.Configuration.GetSection(allowlistKey).GetChildren().Any(entry => !string.IsNullOrWhiteSpace(entry.Value)))
+        app.Logger.LogWarning("{AllowlistKey} has no device IDs: edge requests it guards will get 403. Use indexed entries ({AllowlistKey}:0).", allowlistKey, allowlistKey);
+}
 
 // DB Init
 using (var scope = app.Services.CreateScope())
@@ -221,15 +225,16 @@ if (app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowAllPolicy");
 //app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseRequestAuthorization();
 app.UseAuthorization();
 app.MapControllers();
+// RequestAuthorizationMiddleware only honours the IAM attribute; the framework's .AllowAnonymous() still gets a 401.
+app.MapHealthChecks("/health")
+    .WithMetadata(new Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AllowAnonymousAttribute());
 
 // Uncomment the following line to enable OpenAPI documentation (Development Server)
 // app.Urls.Add("http://*:8088");
 //app.Urls.Add("http://*:8080");
-builder.Logging.AddConsole();
 app.Run();

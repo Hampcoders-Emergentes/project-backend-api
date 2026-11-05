@@ -1,4 +1,5 @@
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Components;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -20,7 +21,7 @@ public class RequireEdgeApiKeyAttribute : AllowEdgeApiKeyAttribute, IAuthorizati
 
         var providedKey = context.HttpContext.Request.Headers["X-Api-Key"].FirstOrDefault();
 
-        if (string.IsNullOrEmpty(providedKey) || providedKey != expectedApiKey)
+        if (!EdgeApiKeyComparer.Matches(providedKey, expectedApiKey))
         {
             context.Result = new UnauthorizedObjectResult(new { message = "Unauthorized: invalid or missing API key." });
         }

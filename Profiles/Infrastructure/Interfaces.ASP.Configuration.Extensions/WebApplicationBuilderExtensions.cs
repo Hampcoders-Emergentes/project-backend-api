@@ -33,6 +33,7 @@ public static class WebApplicationBuilderExtensions
         builder.Services.Configure<ProfilesAISettings>(
             builder.Configuration.GetSection(ProfilesAISettings.SectionName));
         builder.Services.AddHttpClient();
+        builder.Services.AddMemoryCache();
         builder.Services.AddScoped<IDeviceOnboardingService, DeviceOnboardingService>();
     }
 }

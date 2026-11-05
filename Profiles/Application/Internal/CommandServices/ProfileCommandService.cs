@@ -301,7 +301,7 @@ public class ProfileCommandService(
       {
           if (profile.Photo is not null)
           {
-              await fileStorageService.DeleteProfilePhotoAsync(profile.Photo.ProviderId);
+              await fileStorageService.DeleteProfilePhotoAsync(profile.UserId.Value, profile.Photo.ProviderId);
           }
 
           var photo = ProfilePhoto.Create(command.PublicUrl, command.ProviderId);
@@ -335,7 +335,7 @@ public class ProfileCommandService(
       {
           try
           {
-              await fileStorageService.DeleteProfilePhotoAsync(oldProviderId);
+              await fileStorageService.DeleteProfilePhotoAsync(profile.UserId.Value, oldProviderId);
           }
           catch
           {

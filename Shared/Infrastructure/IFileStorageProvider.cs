@@ -33,7 +33,8 @@ public interface IFileStorageProvider
         string folder,
         IReadOnlyDictionary<string, string>? tags = null);
 
-    Task<bool> DeleteAsync(string providerId);
+    // Returns false, without calling the provider, when the file is outside ownerFolder.
+    Task<bool> DeleteAsync(string providerId, string ownerFolder);
 
     Task<SignedUploadData> GetSignedUploadUrlAsync(
         string folder,

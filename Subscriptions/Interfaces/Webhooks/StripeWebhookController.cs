@@ -4,6 +4,7 @@ using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attribut
 using Hampcoders.Electrolink.API.Shared.Infrastructure;
 using Hampcoders.Electrolink.API.Subscriptions.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Subscriptions.Domain.Model.ValueObjects;
+using Hampcoders.Electrolink.API.Subscriptions.Domain.Repository;
 using Hampcoders.Electrolink.API.Subscriptions.Domain.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -17,7 +18,8 @@ public class StripeWebhookController(
     IConfiguration configuration,
     ILogger<StripeWebhookController> logger,
     ISubscriptionCommandService commandService,
-    IPaymentProvider paymentProvider) : ControllerBase
+    IPaymentProvider paymentProvider,
+    IWebhookEventInbox webhookInbox) : ControllerBase
 {
     [HttpPost]
     [AllowAnonymous]
@@ -25,7 +27,17 @@ public class StripeWebhookController(
     {
         var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync();
         var signature = Request.Headers["Stripe-Signature"].ToString();
-        var webhookSecret = configuration["Stripe:WebhookSecret"]!;
+        var webhookSecret = configuration["Stripe:WebhookSecret"];
+
+        // An HMAC keyed with an empty secret can be computed by anyone, so an unset secret must never reach verification.
+        if (string.IsNullOrWhiteSpace(webhookSecret))
+        {
+            logger.LogError("Stripe:WebhookSecret is not configured; rejecting Stripe webhook.");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (string.IsNullOrWhiteSpace(signature))
+            return BadRequest(new { error = "Invalid signature" });
 
         WebhookEvent webhookEvent;
         try
@@ -60,7 +72,11 @@ public class StripeWebhookController(
                 return Ok();
             }
 
-            await handler(webhookEvent);
+            var firstDelivery = await webhookInbox.ProcessOnceAsync(
+                webhookEvent.EventId, webhookEvent.EventType, () => handler(webhookEvent));
+
+            if (!firstDelivery)
+                logger.LogInformation("Ignoring duplicate Stripe event {EventId} ({EventType})", webhookEvent.EventId, webhookEvent.EventType);
         }
         catch (ArgumentException ex)
         {

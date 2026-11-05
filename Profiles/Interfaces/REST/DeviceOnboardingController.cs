@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Profiles.Domain.Services;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.REST.Resources;
 using Microsoft.AspNetCore.Mvc;
@@ -39,6 +40,8 @@ public class DeviceOnboardingController(
     public async Task<IActionResult> Analyze(
         [FromBody] AnalyzeDeviceOnboardingResource resource)
     {
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+
         var request = new AnalyzeDeviceOnboardingRequest(
             resource.DeviceType,
             resource.NominalVoltage,
@@ -48,7 +51,7 @@ public class DeviceOnboardingController(
             resource.PrimaryUse
         );
 
-        var analysis = await onboardingService.AnalyzeAsync(request);
+        var analysis = await onboardingService.AnalyzeAsync(actor.Id.Value, request);
         return Ok(ToResource(analysis));
     }
 
@@ -60,10 +63,20 @@ public class DeviceOnboardingController(
     public async Task<IActionResult> Adjust(
         [FromBody] AdjustThresholdsResource resource)
     {
-        var analysis = await onboardingService.AdjustAnalysisAsync(
-            resource.AnalysisId,
-            resource.UserMessage
-        );
-        return Ok(ToResource(analysis));
+        if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+
+        try
+        {
+            var analysis = await onboardingService.AdjustAnalysisAsync(
+                actor.Id.Value,
+                resource.AnalysisId,
+                resource.UserMessage
+            );
+            return Ok(ToResource(analysis));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 }

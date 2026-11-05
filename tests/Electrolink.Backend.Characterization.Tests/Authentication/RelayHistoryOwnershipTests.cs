@@ -92,20 +92,24 @@ public sealed class RelayHistoryOwnershipTests
         Assert.Empty(scenario.Repository.RequestedDevices);
     }
 
-    [Fact, Trait("Category", "ObservedGap")]
-    public async Task ObservedGap_HumanUserCanReadBothDevicesWithoutOwnerScopeInQuery()
+    [Fact, Trait("Category", "Regression")]
+    public async Task Regression_HumanUserOnlyReadsDevicesTheyCanAccess()
     {
         var scenario = new HistoryOwnershipScenario();
-        using var app = new AuthTestServer(AccessRole.User, monitoringQueries: scenario.Queries);
-        foreach (var command in new[] { scenario.CommandA, scenario.CommandB })
+        using var app = new AuthTestServer(AccessRole.User, monitoringQueries: scenario.Queries,
+            deviceAccess: new AuthTestServer.DeviceAccessStub(scenario.CommandA.DeviceId.Value));
+
+        using (var allowed = await app.Get(HistoryPath(scenario.CommandA.DeviceId.Value), app.ValidToken()))
         {
-            using var response = await app.Get(HistoryPath(command.DeviceId.Value), app.ValidToken());
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            var body = await response.Content.ReadFromJsonAsync<RelayCommandHistoryResource>();
+            Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+            var body = await allowed.Content.ReadFromJsonAsync<RelayCommandHistoryResource>();
             Assert.NotNull(body);
-            Assert.Equal(command.CommandId.Value, Assert.Single(body.Commands).CommandId);
+            Assert.Equal(scenario.CommandA.CommandId.Value, Assert.Single(body.Commands).CommandId);
         }
-        Assert.Equal(2, scenario.Repository.RequestedDevices.Count);
+
+        using var denied = await app.Get(HistoryPath(scenario.CommandB.DeviceId.Value), app.ValidToken());
+        Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+        Assert.Equal(scenario.CommandA.DeviceId.Value, Assert.Single(scenario.Repository.RequestedDevices));
     }
 
     [Theory, Trait("Category", "Regression")]

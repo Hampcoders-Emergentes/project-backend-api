@@ -27,6 +27,7 @@ public static class WebApplicationBuilderExtensions
 
         // Query Services
         builder.Services.AddScoped<IIoTMonitoringQueryService, IoTMonitoringQueryService>();
+        builder.Services.AddScoped<IDeviceAccessService, DeviceAccessService>();
 
         // Outbound Services (cross-BC)
         builder.Services.AddScoped<IServiceOperationContextFacade, ServiceOperationContextFacade>();

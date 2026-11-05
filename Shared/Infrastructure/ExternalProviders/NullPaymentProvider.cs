@@ -56,6 +56,7 @@ public class NullPaymentProvider : IPaymentProvider
     public Task<WebhookEvent> ValidateWebhookSignatureAsync(string payload, string signature, string secret)
     {
         return Task.FromResult(new WebhookEvent(
+            $"null_evt_{Guid.NewGuid():N}",
             "null.event",
             null,
             null,

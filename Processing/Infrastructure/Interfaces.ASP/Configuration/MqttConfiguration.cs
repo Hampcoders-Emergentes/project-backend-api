@@ -8,6 +8,7 @@ public class MqttConfiguration
     public int Port { get; set; } = 1883;
     public bool UseTls { get; set; }
     public string ClientId { get; set; } = "electrolink-backend";
+    public uint SessionExpirySeconds { get; set; } = 86400;
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string TopicPrefix { get; set; } = "electrolink/device";

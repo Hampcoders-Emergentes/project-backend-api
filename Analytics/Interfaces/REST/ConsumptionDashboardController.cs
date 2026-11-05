@@ -2,6 +2,8 @@ using System.Net.Mime;
 using Hampcoders.Electrolink.API.Analytics.Domain.Services;
 using Hampcoders.Electrolink.API.Analytics.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Analytics.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 
@@ -14,6 +16,7 @@ namespace Hampcoders.Electrolink.API.Analytics.Interfaces.REST;
 public class ConsumptionDashboardController(
     IConsumptionDashboardQueryService queryService,
     IConsumptionDashboardCommandService commandService,
+    IProfilesContextFacade profiles,
     ILogger<ConsumptionDashboardController> logger)
     : ControllerBase
 {
@@ -26,6 +29,9 @@ public class ConsumptionDashboardController(
     [SwaggerResponse(StatusCodes.Status404NotFound, "Dashboard not found")]
     public async Task<IActionResult> GetDashboardView(string homeownerId)
     {
+        var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
+        if (denied is not null) return denied;
+
         var dashboard = await queryService.GetDashboardViewAsync(homeownerId);
         if (dashboard == null)
             return NotFound(new { message = "Dashboard not found for the given homeowner." });
@@ -43,6 +49,9 @@ public class ConsumptionDashboardController(
     [SwaggerResponse(StatusCodes.Status404NotFound, "Cost projection not available")]
     public async Task<IActionResult> GetCostProjection(string homeownerId)
     {
+        var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
+        if (denied is not null) return denied;
+
         var dashboard = await queryService.GetCostProjectionAsync(homeownerId);
         if (dashboard == null)
             return NotFound(new { message = "Cost projection not available for the given homeowner." });
@@ -60,6 +69,9 @@ public class ConsumptionDashboardController(
     [SwaggerResponse(StatusCodes.Status404NotFound, "Dashboard not found")]
     public async Task<IActionResult> UpgradeTier(string homeownerId, [FromBody] UpgradeTierResource resource)
     {
+        var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
+        if (denied is not null) return denied;
+
         try
         {
             await commandService.UpgradeDashboardTierAsync(homeownerId, resource.NewPlanTier);
@@ -81,6 +93,9 @@ public class ConsumptionDashboardController(
     public async Task<IActionResult> UpdateThresholds(
         string homeownerId, [FromBody] Dictionary<string, decimal> thresholds)
     {
+        var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
+        if (denied is not null) return denied;
+
         try
         {
             await commandService.UpdateConsumptionThresholdsAsync(homeownerId, thresholds);

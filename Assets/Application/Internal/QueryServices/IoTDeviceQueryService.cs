@@ -33,6 +33,12 @@ public class IoTDeviceQueryService : IIoTDeviceQueryService
     public Task<IEnumerable<IoTDevice>> Handle(GetIoTDevicesByPropertyIdQuery query)
         => _deviceRepository.FindByPropertyIdAsync(PropertyId.From(query.PropertyId));
 
+    public async Task<IEnumerable<IoTDevice>?> Handle(GetIoTDevicesByOwnedPropertyQuery query)
+    {
+        var property = await _properties.FindByIdAndOwnerAsync(PropertyId.From(query.PropertyId), query.Owner);
+        return property is null ? null : await _deviceRepository.FindByPropertyIdAsync(property.Id);
+    }
+
     public Task<IEnumerable<IoTDevice>> Handle(GetIoTDevicesByStatusQuery query)
         => _deviceRepository.FindByStatusAsync(query.Status);
 

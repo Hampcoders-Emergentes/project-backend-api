@@ -1,0 +1,157 @@
+# ============================================================================
+# ElectroLink Backend API — stack de desarrollo local
+# ============================================================================
+# Construye la imagen desde ./Dockerfile y levanta API + PostgreSQL/PostGIS + MQTT.
+#
+#   docker compose up --build          # reconstruye si cambió el código y arranca
+#   docker compose up -d --build       # igual, en segundo plano
+#   docker compose up -d --build api   # solo la API (reusa db y mqtt)
+#   docker compose logs -f api         # seguir logs
+#   docker compose down                # detener (conserva el volumen de datos)
+#   docker compose down -v             # detener y borrar la base de datos
+#
+# Todos los valores ${VAR:-default} se pueden sobrescribir desde un archivo .env
+# (ya está en .gitignore) o exportando la variable en la shell. NO guardes
+# secretos reales en este archivo.
+#
+# Referencia de hallazgos: AUDIT-REPORT.md (F-01, F-04, F-09, F-13).
+# ============================================================================
+
+name: electrolink
+
+services:
+
+  # --------------------------------------------------------------------------
+  # API .NET 9 (ASP.NET Core)
+  # --------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: electrolink-api:local
+    container_name: electrolink-api
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      # Production evita UseHttpsRedirection (Program.cs:219-222): no hay
+      # certificado en el contenedor y el 8081 no se publica.
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "8080"
+
+      # --- Persistencia -----------------------------------------------------
+      # Host=db (nombre del servicio), NO localhost.
+      # Program.cs:210 ejecuta EnsureCreated() al arrancar: si la base no está
+      # lista, el contenedor muere. Por eso depends_on espera el healthcheck.
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres};Database=${POSTGRES_DB:-electrolink2}"
+
+      # --- JWT --------------------------------------------------------------
+      # HS256 requiere >= 32 caracteres (Program.cs:166-167).
+      TokenSettings__Secret: "${TOKEN_SECRET:-dev-only-secret-change-me-32-chars-min}"
+
+      # --- Edge API ---------------------------------------------------------
+      # RequireEdgeApiKey compara este valor con el header X-Api-Key.
+      EdgeApi__ApiKey: "${EDGE_API_KEY:-dev-edge-key}"
+      # F-09: estas listas se leen en código pero faltaban en appsettings.json.
+      # Vacías = el edge recibe 403 en todo (fail-closed). Descomenta y ajusta
+      # los IDs de dispositivo que quieras autorizar:
+      # EdgeApi__EquipmentReadings__AllowedDeviceIds__0: "dev-edge-0001"
+      # EdgeApi__RelayHistory__AllowedDeviceIds__0: "dev-edge-0001"
+
+      # --- Proveedores externos (desactivados en local) ---------------------
+      # Implementaciones Null* → la API arranca sin credenciales de terceros.
+      ExternalProviders__Payment: disabled
+      ExternalProviders__FileStorage: disabled
+      ExternalProviders__AIMatching: disabled
+
+      # --- MQTT -------------------------------------------------------------
+      Mqtt__Host: mqtt
+      Mqtt__Port: "1883"
+      Mqtt__UseTls: "false"
+      Mqtt__ClientId: electrolink-backend
+      Mqtt__TopicPrefix: electrolink/device
+      Mqtt__TelemetryTopic: "electrolink/device/+/telemetry"
+      Mqtt__AnomalyTopic: "electrolink/device/+/anomaly"
+      Mqtt__StatusTopic: "electrolink/device/+/status"
+      Mqtt__CommandResponseTopic: "electrolink/device/+/command/response"
+      Mqtt__QoS: "1"
+      Mqtt__ReconnectDelaySeconds: "5"
+      # MaxReconnectAttempts=0 → reintenta indefinidamente sin tumbar la API.
+      Mqtt__MaxReconnectAttempts: "0"
+
+      # --- Para activar proveedores reales, exporta y descomenta ------------
+      # ExternalProviders__Payment: stripe
+      # Stripe__SecretKey: ${STRIPE_SECRET_KEY}
+      # Stripe__WebhookSecret: ${STRIPE_WEBHOOK_SECRET}
+      # Stripe__PublishableKey: ${STRIPE_PUBLISHABLE_KEY}
+      # ExternalProviders__FileStorage: cloudinary
+      # Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME}
+      # Cloudinary__ApiKey: ${CLOUDINARY_API_KEY}
+      # Cloudinary__ApiSecret: ${CLOUDINARY_API_SECRET}
+      # ExternalProviders__AIMatching: gemini
+      # Gemini__ApiKey: ${GEMINI_API_KEY}
+      # ProfilesAI__ApiKey: ${GROQ_API_KEY}   # Groq no tiene selector (F-14)
+
+    depends_on:
+      db:
+        # Espera a que Postgres acepte conexiones antes de arrancar (EnsureCreated).
+        condition: service_healthy
+      mqtt:
+        # Solo espera el arranque: la API reintenta la conexión MQTT sola.
+        condition: service_started
+
+    # /health existe (Program.cs:234) y responde "Healthy". La imagen aspnet:9.0
+    # no trae curl/wget, así que el probe usa bash + /dev/tcp (verificado en
+    # este contenedor). Comprueba que Kestrel escucha; para validar el estado
+    # interno de los health checks, consultar GET /health.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # EnsureCreated() + arranque de EF puede tardar en la primera ejecución.
+      start_period: 40s
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 + PostGIS (obligatorio: el modelo usa NetTopologySuite)
+  # --------------------------------------------------------------------------
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: electrolink-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-electrolink2}
+    ports:
+      # 5433 en el host para no chocar con un Postgres local en 5432.
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-electrolink2}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Broker MQTT (telemetría y comandos de dispositivos IoT)
+  # --------------------------------------------------------------------------
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: electrolink-mqtt
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      # Sin este archivo, Mosquitto 2.x rechaza conexiones remotas.
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -p 1883 -t '$$SYS/broker/version' -C 1 -W 3"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  pgdata:
+  mosquitto_data:

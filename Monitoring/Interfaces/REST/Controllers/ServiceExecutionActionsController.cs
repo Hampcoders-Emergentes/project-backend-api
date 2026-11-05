@@ -1,9 +1,11 @@
 using Hampcoders.Electrolink.API.Monitoring.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Monitoring.Domain.Model.Exceptions;
+using Hampcoders.Electrolink.API.Monitoring.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.Monitoring.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Monitoring.Domain.Services;
 using Hampcoders.Electrolink.API.Monitoring.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Monitoring.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Infrastructure;
 using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
@@ -16,7 +18,8 @@ namespace Hampcoders.Electrolink.API.Monitoring.Interfaces.REST.Controllers;
 [Produces("application/json")]
 public class ServiceExecutionActionsController(
     IServiceExecutionCommandService commandService,
-    IServiceExecutionQueryService queryService) : ControllerBase
+    IServiceExecutionQueryService queryService,
+    IProfilesContextFacade profiles) : ControllerBase
 {
     [HttpPost("start")]
     [ProducesResponseType(typeof(ServiceExecutionResource), StatusCodes.Status200OK)]
@@ -109,7 +112,9 @@ public class ServiceExecutionActionsController(
             var execution = await commandService.Handle(command);
             return Ok(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity(execution));
         }
+        catch (KeyNotFoundException ex)      { return NotFound(new { message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (UnauthorizedAccessException)  { return Forbid(); }
     }
 
     [HttpPut("report")]
@@ -129,7 +134,9 @@ public class ServiceExecutionActionsController(
             var execution = await commandService.Handle(command);
             return Ok(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity(execution));
         }
+        catch (KeyNotFoundException ex)      { return NotFound(new { message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (UnauthorizedAccessException)  { return Forbid(); }
     }
 
     [HttpPost("complete")]
@@ -166,9 +173,19 @@ public class ServiceExecutionActionsController(
             var command = CancelServiceExecutionCommandFromResourceAssembler.ToCommandFromResource(
                 executionId, actorId, resource);
 
+            // CancelledBy comes from the client, so it must match the actor's actual role in this execution.
+            var (subject, denied) = await this.ResolveSubjectAsync(profiles);
+            if (denied is not null) return denied;
+            var current = await queryService.Handle(new GetServiceExecutionByIdQuery(ServiceExecutionId.From(executionId)));
+            var isTechnician = current is not null && subject!.IsTechnician(current.TechnicianId);
+            var isClient = current is not null && subject!.IsClient(current.Owner);
+            if (!isTechnician && !isClient) return this.ResourceNotFound();
+            if (command.CancelledBy != (isTechnician ? ECancelledBy.Technician : ECancelledBy.Homeowner)) return Forbid();
+
             var execution = await commandService.Handle(command);
             return Ok(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity(execution));
         }
+        catch (KeyNotFoundException ex)      { return NotFound(new { message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
     }
 
@@ -189,7 +206,9 @@ public class ServiceExecutionActionsController(
             var execution = await commandService.Handle(command);
             return Ok(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity(execution));
         }
+        catch (KeyNotFoundException ex)      { return NotFound(new { message = ex.Message }); }
         catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (UnauthorizedAccessException)  { return Forbid(); }
     }
 
     [HttpPost("reviews/client")]
@@ -211,6 +230,8 @@ public class ServiceExecutionActionsController(
         }
         catch (InvalidOperationException ex)  { return BadRequest(new { message = ex.Message }); }
         catch (ArgumentOutOfRangeException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (KeyNotFoundException ex)        { return NotFound(new { message = ex.Message }); }
+        catch (UnauthorizedAccessException)    { return Forbid(); }
     }
 
     [HttpPost("reviews/technician")]
@@ -232,5 +253,7 @@ public class ServiceExecutionActionsController(
         }
         catch (InvalidOperationException ex)  { return BadRequest(new { message = ex.Message }); }
         catch (ArgumentOutOfRangeException ex) { return BadRequest(new { message = ex.Message }); }
+        catch (KeyNotFoundException ex)        { return NotFound(new { message = ex.Message }); }
+        catch (UnauthorizedAccessException)    { return Forbid(); }
     }
 }

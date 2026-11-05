@@ -24,7 +24,7 @@ public class SubscriptionPlanPriceResolver
             _ => throw new ArgumentException("Invalid billing cycle.")
         };
 
-        return _configuration[key] ?? throw new InvalidOperationException($"Stripe price is not configured for key '{key}'.");
+        return ConfiguredPrice(key);
     }
 
     public string ResolvePriceIdForRole(EBusinessRole role, EBillingCycle billingCycle, string? planSubtype = null)
@@ -42,6 +42,15 @@ public class SubscriptionPlanPriceResolver
             _ => throw new ArgumentException("Invalid role/cycle/plan combination.")
         };
 
-        return _configuration[key] ?? throw new InvalidOperationException($"Stripe price is not configured for key '{key}'.");
+        return ConfiguredPrice(key);
+    }
+
+    // appsettings declares every key, so an empty value means "not configured" rather than a price to send to Stripe.
+    private string ConfiguredPrice(string key)
+    {
+        var priceId = _configuration[key];
+        return string.IsNullOrWhiteSpace(priceId)
+            ? throw new InvalidOperationException($"Stripe price is not configured for key '{key}'.")
+            : priceId;
     }
 }

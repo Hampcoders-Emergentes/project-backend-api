@@ -1,3 +1,5 @@
+using MediatR;
+
 namespace Hampcoders.Electrolink.API.Processing.Domain.Model.Commands;
 
 public record AcknowledgeRelayExecutionCommand(
@@ -5,4 +7,4 @@ public record AcknowledgeRelayExecutionCommand(
     string  DeviceId,
     bool    ExecutedSuccessfully,
     DateTime ExecutedAt
-);
+) : IRequest;

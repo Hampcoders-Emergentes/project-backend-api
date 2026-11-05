@@ -42,6 +42,12 @@ public class RelayCommandService(
                 throw new UnauthorizedAccessException(
                     $"No active IN_PROGRESS service found for property {command.PropertyId} " +
                     $"assigned to technician {command.TechnicianId}.");
+
+            // The service check above only covers the requested property, so the device must actually belong to it.
+            var stream = await streamRepository.FindByDeviceIdAsync(command.DeviceId);
+            if (stream is null || stream.PropertyId.Value != command.PropertyId)
+                throw new UnauthorizedAccessException(
+                    $"Device {command.DeviceId} does not belong to property {command.PropertyId}.");
         }
 
         var pending = await relayRepository.FindPendingByDeviceAsync(command.DeviceId);

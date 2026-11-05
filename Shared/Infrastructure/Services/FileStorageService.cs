@@ -40,9 +40,9 @@ public class FileStorageService(IFileStorageProvider fileStorageProvider) : IFil
         return await fileStorageProvider.GetSignedUploadUrlAsync(folder, AllowedFormats, WorkPhotoMaxSizeBytes);
     }
 
-    public async Task<bool> DeleteProfilePhotoAsync(string providerId)
+    public async Task<bool> DeleteProfilePhotoAsync(string userId, string providerId)
     {
-        return await fileStorageProvider.DeleteAsync(providerId);
+        return await fileStorageProvider.DeleteAsync(providerId, FileStorageFolders.ProfilePhoto(userId));
     }
 
     public string GetThumbnailUrl(string providerId)

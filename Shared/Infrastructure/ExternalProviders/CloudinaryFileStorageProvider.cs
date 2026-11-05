@@ -27,7 +27,7 @@ public class CloudinaryFileStorageProvider : IFileStorageProvider
         {
             var ext = Path.GetExtension(fileName).ToLowerInvariant();
             var isImage = ImageExtensions.Contains(ext);
-            var publicId = "{folder}/{Path.GetFileNameWithoutExtension(fileName)}";
+            var publicId = $"{folder}/{Path.GetFileNameWithoutExtension(fileName)}";
 
             if (isImage)
             {
@@ -62,8 +62,11 @@ public class CloudinaryFileStorageProvider : IFileStorageProvider
         }
     }
 
-    public async Task<bool> DeleteAsync(string providerId)
+    public async Task<bool> DeleteAsync(string providerId, string ownerFolder)
     {
+        if (!FileStorageFolders.Contains(ownerFolder, providerId))
+            return false;
+
         try
         {
             var deletionParams = new DeletionParams(providerId) { ResourceType = ResourceType.Image };
@@ -98,7 +101,7 @@ public class CloudinaryFileStorageProvider : IFileStorageProvider
                 parameters["max_bytes"] = maxBytes.Value;
 
             var signature = _cloudinary.Api.SignParameters(parameters);
-            var uploadUrl = "https://api.cloudinary.com/v1_1/{_settings.CloudName}/auto/upload";
+            var uploadUrl = $"https://api.cloudinary.com/v1_1/{_settings.CloudName}/auto/upload";
 
             return Task.FromResult(new SignedUploadData(uploadUrl, signature, timestamp, _settings.ApiKey));
         }

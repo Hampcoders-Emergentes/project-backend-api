@@ -15,9 +15,9 @@ public class NullFileStorageProvider : IFileStorageProvider
             fileStream.Length));
     }
 
-    public Task<bool> DeleteAsync(string providerId)
+    public Task<bool> DeleteAsync(string providerId, string ownerFolder)
     {
-        return Task.FromResult(true);
+        return Task.FromResult(FileStorageFolders.Contains(ownerFolder, providerId));
     }
 
     public Task<SignedUploadData> GetSignedUploadUrlAsync(
