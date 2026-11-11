@@ -15,4 +15,11 @@ public sealed class StoreNotAccessibleException() : Exception("Store not found."
 public interface IStoreMeasurementPort
 {
     Task<StoreMeasurementSet> Load(UserId actor, string storeId, DateTime fromUtc, DateTime toUtc, CancellationToken ct);
+
+    /// <summary>Samples of one equipment located in the given area of the actor's store.</summary>
+    Task<StoreMeasurementSet> LoadEquipment(UserId actor, string storeId, string areaId, string equipmentId,
+        DateTime fromUtc, DateTime toUtc, CancellationToken ct);
+
+    /// <summary>Whether the actor owns the store.</summary>
+    Task<bool> CanAccess(UserId actor, string storeId, CancellationToken ct);
 }

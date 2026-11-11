@@ -28,6 +28,13 @@ public static class WebApplicationBuilderExtensions
         builder.Services.AddSingleton<IConsumptionReportExporter, CsvConsumptionReportExporter>();
         builder.Services.AddScoped<Hampcoders.Electrolink.API.Analytics.Application.Internal.QueryServices.StoreConsumptionQueryService>();
 
+        // Energy cost, forecasting and efficiency reports
+        builder.Services.AddSingleton<IUtilityRateProvider, Hampcoders.Electrolink.API.Analytics.Infrastructure.Tariffs.ConfigurationUtilityRateProvider>();
+        builder.Services.AddSingleton<IEnergyReportRenderer, EnergyReportRenderer>();
+        builder.Services.AddScoped<IEnergyReportStorage, Hampcoders.Electrolink.API.Analytics.Infrastructure.Persistence.EFC.Reports.DbEnergyReportStorage>();
+        builder.Services.AddScoped<EnergyCostQueryService>();
+        builder.Services.AddScoped<EnergyReportCommandService>();
+
         // Jobs
         builder.Services.AddScoped<TechnicianMetricsPeriodInitializerJob>();
     }
