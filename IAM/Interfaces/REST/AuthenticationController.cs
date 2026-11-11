@@ -155,7 +155,7 @@ public class AuthenticationController(IUserCommandService userCommandService, IL
     [AllowAnonymous]
     [ApiDocOperation(
         Summary = "Request password reset",
-        Description = "Sends a password reset token to the user's email. Returns 200 even if email not found (security).",
+        Description = "Emails a single-use reset link valid for 15 minutes. Always returns 200, whether or not the email is registered.",
         OperationId = "RequestPasswordReset")]
     [ApiDocResponse(StatusCodes.Status200OK, "If the email exists, a reset token is generated.")]
     [ApiDocResponse(StatusCodes.Status400BadRequest, "Invalid data")]
@@ -190,7 +190,7 @@ public class AuthenticationController(IUserCommandService userCommandService, IL
             await userCommandService.Handle(command);
             return Ok(new { message = "Password reset successfully." });
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
         {
             return BadRequest(new { message = ex.Message });
         }

@@ -26,6 +26,8 @@ using Hampcoders.Electrolink.API.Shared.Infrastructure.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Configuration;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Email;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Auditing;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -95,6 +97,7 @@ builder.AddSubscriptionServices();
 builder.AddAnalyticsContextServices();
 builder.AddProcessingContextServices();
 builder.Services.AddExternalProviders(builder.Configuration);
+builder.Services.AddEmailDelivery(builder.Configuration);
 
 builder.Services.AddScoped<IOrphanedFileRepository, OrphanedFileRepository>();
 builder.Services.AddHostedService<OutboxProcessorBackgroundService>();
@@ -173,6 +176,8 @@ if (app.Environment.IsDevelopment())
 
 //app.UseHttpsRedirection();
 app.UseAuthentication();
+// Before request authorization, so the 401/403 responses it produces are audited too.
+app.UseAuditLogging();
 app.UseRequestAuthorization();
 app.UseAuthorization();
 app.MapControllers();

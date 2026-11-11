@@ -245,12 +245,18 @@ public class UserCommandService(
         logger.LogInformation("[IAM] Password reset requested for {Email}", command.Email);
     }
 
+    private const int MinPasswordLength = 8;
+
     public async Task Handle(ResetPasswordCommand command)
     {
+        if (string.IsNullOrWhiteSpace(command.ResetToken) || command.ResetToken.Length > 200)
+            throw new ArgumentException("Invalid or expired reset token.");
+        if (string.IsNullOrEmpty(command.NewPassword) || command.NewPassword.Length < MinPasswordLength || command.NewPassword.Length > 128)
+            throw new ArgumentException($"Password must contain between {MinPasswordLength} and 128 characters.");
         if (command.NewPassword != command.NewPasswordConfirmation)
             throw new ArgumentException("Passwords do not match.");
 
-        var user = await userRepository.FindByPasswordResetTokenAsync(command.ResetToken)
+        var user = await userRepository.FindByPasswordResetTokenAsync(PasswordResetToken.HashOf(command.ResetToken))
             ?? throw new ArgumentException("Invalid or expired reset token.");
 
         var newHash = hashingService.HashPassword(command.NewPassword);
