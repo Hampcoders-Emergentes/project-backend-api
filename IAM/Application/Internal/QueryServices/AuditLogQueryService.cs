@@ -7,7 +7,7 @@ using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 namespace Hampcoders.Electrolink.API.IAM.Application.Internal.QueryServices;
 
 public sealed record GetStoreAuditLogsQuery(UserId Actor, string StoreId, string? From, string? To, string? Action, string? Status,
-    int Page, int PageSize);
+    int Page, int PageSize, string? OperatorId = null, string? Resource = null);
 
 public sealed record AuditLogEntryResource(long Id, string? UserId, string? StoreId, string Action, string Resource, string HttpMethod,
     string Path, int StatusCode, string Status, string? IpAddress, DateTime TimestampUtc);
@@ -30,9 +30,14 @@ public sealed class AuditLogQueryService(IAuditLogRepository repository, Externa
         if (status != null && !AuditStatus.All.Contains(status))
             throw new ArgumentException("status must be one of " + string.Join(", ", AuditStatus.All) + ".");
         var interval = query.From == null && query.To == null ? null : ExplicitUtcInterval.Parse(query.From, query.To);
+        var operatorId = string.IsNullOrWhiteSpace(query.OperatorId) ? null : query.OperatorId.Trim();
+        if (operatorId is { Length: > 100 }) throw new ArgumentException("operatorId must contain at most 100 characters.");
+        var resource = string.IsNullOrWhiteSpace(query.Resource) ? null : query.Resource.Trim();
+        if (resource != null && (resource.Length > 100 || resource.Any(c => !(char.IsLetterOrDigit(c) || c is '-' or '/' or '{' or '}'))))
+            throw new ArgumentException("resource may contain only letters, digits, '-', '/', '{' and '}' (at most 100 characters).");
         if (!await stores.CanManage(query.Actor, query.StoreId, ct)) throw new AuditStoreNotFoundException();
 
-        var rows = await repository.ListAsync(new AuditLogFilter(query.StoreId, interval?.FromUtc, interval?.ToUtc, action, status),
+        var rows = await repository.ListAsync(new AuditLogFilter(query.StoreId, interval?.FromUtc, interval?.ToUtc, action, status, operatorId, resource),
             (query.Page - 1) * query.PageSize, query.PageSize + 1, ct);
         return new(rows.Take(query.PageSize).Select(e => new AuditLogEntryResource(e.Id, e.UserId, e.StoreId, e.Action, e.Resource,
             e.HttpMethod, e.Path, e.StatusCode, e.Status, e.IpAddress, e.TimestampUtc)).ToList(), query.Page, query.PageSize,

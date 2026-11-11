@@ -13,16 +13,18 @@ public sealed class StoreAuditLogsController(AuditLogQueryService service) : Con
 {
     /// <summary>
     ///     Newest first. Filters: from/to (ISO timestamps with offset, max 31 days), action=AUTHENTICATE|READ|CREATE|UPDATE|DELETE,
-    ///     status=SUCCESS|FORBIDDEN|FAILED.
+    ///     status=SUCCESS|FORBIDDEN|FAILED, operatorId (user who acted) and resource (fragment of the endpoint template, e.g.
+    ///     "alerts" to trace who acknowledged, assigned or resolved each electrical event).
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<AuditLogPageResource>> List(string storeId, [FromQuery] string? from = null, [FromQuery] string? to = null,
-        [FromQuery] string? action = null, [FromQuery] string? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+        [FromQuery] string? action = null, [FromQuery] string? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
+        [FromQuery] string? operatorId = null, [FromQuery] string? resource = null)
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try
         {
-            return Ok(await service.Handle(new GetStoreAuditLogsQuery(actor.Id, storeId, from, to, action, status, page, pageSize),
+            return Ok(await service.Handle(new GetStoreAuditLogsQuery(actor.Id, storeId, from, to, action, status, page, pageSize, operatorId, resource),
                 HttpContext.RequestAborted));
         }
         catch (AuditStoreNotFoundException) { return NotFound(new { message = "Resource not found." }); }

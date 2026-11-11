@@ -92,8 +92,9 @@ public sealed class AuditLoggingMiddleware(RequestDelegate next, AuditLogQueue q
                 "DELETE" => AuditAction.Delete, _ => AuditAction.Read
             };
             var endpoint = context.GetEndpoint() as RouteEndpoint;
-            var storeId = request.RouteValues.TryGetValue("storeId", out var value) && value is string s
-                && s.StartsWith("store-", StringComparison.Ordinal) && s.Length <= 38 ? s : null;
+            var routeStore = request.RouteValues.TryGetValue("storeId", out var value) ? value as string : null;
+            var candidate = routeStore ?? AuditContext.StoreOf(context);
+            var storeId = candidate != null && candidate.StartsWith("store-", StringComparison.Ordinal) && candidate.Length <= 38 ? candidate : null;
             var user = context.Items["User"] as User;
             var entry = AuditLogEntry.Record(user?.Id.Value, storeId, action, endpoint?.RoutePattern.RawText ?? request.Path.Value ?? "/",
                 request.Method, request.Path.Value ?? "/", code, status, context.Connection.RemoteIpAddress?.ToString(), DateTime.UtcNow);
@@ -105,6 +106,19 @@ public sealed class AuditLoggingMiddleware(RequestDelegate next, AuditLogQueue q
             logger.LogError(ex, "[Audit] Could not capture audit entry");
         }
     }
+}
+
+/// <summary>
+///     Lets an endpoint whose route has no store (e.g. /alerts/{alertId}/assign) attribute its audit entry to the store
+///     the affected resource belongs to, once the endpoint has resolved it.
+/// </summary>
+public static class AuditContext
+{
+    private const string StoreKey = "Audit:StoreId";
+
+    public static void SetStore(HttpContext context, string storeId) => context.Items[StoreKey] = storeId;
+
+    internal static string? StoreOf(HttpContext context) => context.Items.TryGetValue(StoreKey, out var value) ? value as string : null;
 }
 
 public static class AuditLoggingExtensions

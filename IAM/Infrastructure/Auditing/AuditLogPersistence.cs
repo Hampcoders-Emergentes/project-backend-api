@@ -37,6 +37,8 @@ public sealed class AuditLogRepository(StoreManagementDbContext context) : IAudi
         if (filter.ToUtc.HasValue) query = query.Where(e => e.TimestampUtc < filter.ToUtc.Value);
         if (filter.Action != null) query = query.Where(e => e.Action == filter.Action);
         if (filter.Status != null) query = query.Where(e => e.Status == filter.Status);
+        if (filter.OperatorId != null) query = query.Where(e => e.UserId == filter.OperatorId);
+        if (filter.Resource != null) query = query.Where(e => EF.Functions.ILike(e.Resource, "%" + filter.Resource + "%"));
         return query.OrderByDescending(e => e.TimestampUtc).ThenByDescending(e => e.Id).Skip(skip).Take(take).ToListAsync(ct);
     }
 }
