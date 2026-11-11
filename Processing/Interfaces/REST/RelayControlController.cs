@@ -3,7 +3,7 @@ using Hampcoders.Electrolink.API.Processing.Domain.Services;
 using Hampcoders.Electrolink.API.Processing.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Processing.Interfaces.REST;
 
@@ -13,7 +13,7 @@ namespace Hampcoders.Electrolink.API.Processing.Interfaces.REST;
 public class RelayControlController(IRelayCommandService relayService) : ControllerBase
 {
     [HttpPost]
-    [SwaggerOperation(Summary = "Issue relay command (technician)", OperationId = "IssueRelayCommand")]
+    [ApiDocOperation(Summary = "Issue relay command (technician)", OperationId = "IssueRelayCommand")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

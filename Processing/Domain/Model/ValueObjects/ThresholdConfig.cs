@@ -36,6 +36,14 @@ public record ThresholdConfig
         float nominalFrequency, int disconnectionThresholdMin,
         float normalLimitAmps = 0.20f, float alertLimitAmps = 0.60f)
     {
+        if (!float.IsFinite(nominalVoltage) || !float.IsFinite(maxConsumptionWatts) || !float.IsFinite(maxCurrentAmps)
+            || !float.IsFinite(minPowerFactor) || !float.IsFinite(nominalFrequency)
+            || !float.IsFinite(normalLimitAmps) || !float.IsFinite(alertLimitAmps))
+            throw new ArgumentException("Thresholds must be finite numbers.");
+        if (maxCurrentAmps <= 0)
+            throw new ArgumentException("Max current must be positive.");
+        if (nominalFrequency <= 0)
+            throw new ArgumentException("Nominal frequency must be positive.");
         if (nominalVoltage <= 0)
             throw new ArgumentException("Nominal voltage must be positive.");
         if (maxConsumptionWatts <= 0)

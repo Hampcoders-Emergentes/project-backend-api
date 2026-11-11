@@ -8,7 +8,7 @@ using Hampcoders.Electrolink.API.Processing.Domain.Services;
 using Hampcoders.Electrolink.API.Processing.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Processing.Interfaces.REST.Transform;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Processing.Interfaces.REST;
 
@@ -25,7 +25,7 @@ public class DeviceMonitoringController(
         (HttpContext.Items["User"] as Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates.User)?.Id.Value;
 
     [HttpGet("{deviceId}/status")]
-    [SwaggerOperation(Summary = "Get device status", OperationId = "GetDeviceStatus")]
+    [ApiDocOperation(Summary = "Get device status", OperationId = "GetDeviceStatus")]
     [ProducesResponseType(typeof(DeviceStatusResource), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DeviceStatusResource>> GetDeviceStatus(string deviceId, [FromServices] IDeviceAccessService access)
@@ -44,7 +44,7 @@ public class DeviceMonitoringController(
     }
 
     [HttpGet("{deviceId}/readings/recent")]
-    [SwaggerOperation(Summary = "Get recent readings in time window", OperationId = "GetRecentReadings")]
+    [ApiDocOperation(Summary = "Get recent readings in time window", OperationId = "GetRecentReadings")]
     [ProducesResponseType(typeof(RecentReadingsResource), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<RecentReadingsResource>> GetRecentReadings(
@@ -73,7 +73,7 @@ public class DeviceMonitoringController(
     }
 
     [HttpGet("properties/{propertyId}/anomalies")]
-    [SwaggerOperation(Summary = "Get active anomalies by property", OperationId = "GetActiveAnomalies")]
+    [ApiDocOperation(Summary = "Get active anomalies by property", OperationId = "GetActiveAnomalies")]
     [ProducesResponseType(typeof(IEnumerable<AnomalyResource>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<AnomalyResource>>> GetActiveAnomalies(string propertyId, [FromServices] IDeviceAccessService access)
     {
@@ -87,7 +87,7 @@ public class DeviceMonitoringController(
     [HttpGet("{deviceId}/relay/history")]
     [AllowEdgeApiKey]
     [RequireRelayHistoryDeviceAccess]
-    [SwaggerOperation(Summary = "Get relay command history for device", OperationId = "GetRelayHistory")]
+    [ApiDocOperation(Summary = "Get relay command history for device", OperationId = "GetRelayHistory")]
     [ProducesResponseType(typeof(RelayCommandHistoryResource), StatusCodes.Status200OK)]
     public async Task<ActionResult<RelayCommandHistoryResource>> GetRelayHistory(string deviceId, [FromServices] IDeviceAccessService access)
     {
@@ -103,7 +103,7 @@ public class DeviceMonitoringController(
     }
 
     [HttpPost("anomalies/{anomalyId}/acknowledge")]
-    [SwaggerOperation(Summary = "Acknowledge an anomaly manually", OperationId = "AcknowledgeAnomaly")]
+    [ApiDocOperation(Summary = "Acknowledge an anomaly manually", OperationId = "AcknowledgeAnomaly")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AcknowledgeAnomaly(string anomalyId, [FromServices] IDeviceAccessService access)
@@ -121,7 +121,7 @@ public class DeviceMonitoringController(
     }
 
     [HttpPost("anomalies/{anomalyId}/force-resolve")]
-    [SwaggerOperation(Summary = "Force resolve a CRITICAL anomaly", OperationId = "ForceResolveAnomaly")]
+    [ApiDocOperation(Summary = "Force resolve a CRITICAL anomaly", OperationId = "ForceResolveAnomaly")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

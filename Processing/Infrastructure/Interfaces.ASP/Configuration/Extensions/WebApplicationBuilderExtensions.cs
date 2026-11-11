@@ -46,6 +46,8 @@ public static class WebApplicationBuilderExtensions
         builder.Services.AddHostedService(sp =>
             (MqttDeviceSubscriberService)sp.GetRequiredService<IMqttSubscriptionService>());
 
+        builder.Services.AddHostedService<Hampcoders.Electrolink.API.Processing.Infrastructure.BackgroundServices.RelayCommandTimeoutWorker>();
+
         // MQTT Health Check — monitoreo de conectividad IoT
         builder.Services.AddHealthChecks()
             .AddCheck<MqttHealthCheck>("mqtt", tags: new[] { "iot", "readiness" });
