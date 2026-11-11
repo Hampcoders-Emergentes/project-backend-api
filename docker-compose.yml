@@ -22,7 +22,7 @@ name: electrolink
 services:
 
   # --------------------------------------------------------------------------
-  # API .NET 9 (ASP.NET Core)
+  # API .NET 11 (ASP.NET Core)
   # --------------------------------------------------------------------------
   api:
     build:
@@ -40,7 +40,7 @@ services:
 
       # --- Persistencia -----------------------------------------------------
       # Host=db (nombre del servicio), NO localhost.
-      # Program.cs:210 ejecuta EnsureCreated() al arrancar: si la base no está
+      # Program.cs aplica las migraciones EF al arrancar: si la base no está
       # lista, el contenedor muere. Por eso depends_on espera el healthcheck.
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres};Database=${POSTGRES_DB:-electrolink2}"
 
@@ -93,13 +93,13 @@ services:
 
     depends_on:
       db:
-        # Espera a que Postgres acepte conexiones antes de arrancar (EnsureCreated).
+        # Espera a que Postgres acepte conexiones antes de arrancar (migraciones EF).
         condition: service_healthy
       mqtt:
         # Solo espera el arranque: la API reintenta la conexión MQTT sola.
         condition: service_started
 
-    # /health existe (Program.cs:234) y responde "Healthy". La imagen aspnet:9.0
+    # /health existe (Program.cs:234) y responde "Healthy". La imagen aspnet:11.0
     # no trae curl/wget, así que el probe usa bash + /dev/tcp (verificado en
     # este contenedor). Comprueba que Kestrel escucha; para validar el estado
     # interno de los health checks, consultar GET /health.
@@ -108,7 +108,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      # EnsureCreated() + arranque de EF puede tardar en la primera ejecución.
+      # Migraciones EF + arranque puede tardar en la primera ejecución.
       start_period: 40s
 
   # --------------------------------------------------------------------------
