@@ -1,6 +1,7 @@
 using Hampcoders.Electrolink.API.AlertManagement.Domain;
 using Hampcoders.Electrolink.API.AlertManagement.Infrastructure;
 using Hampcoders.Electrolink.API.Analytics.Infrastructure.Persistence.EFC.Reports;
+using Hampcoders.Electrolink.API.Analytics.Infrastructure.Persistence.EFC.Planning;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Auditing;
 using Hampcoders.Electrolink.API.StoreManagement.Domain.Model;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,8 @@ using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 
 namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence;
 
-// Store-centric model (stores, telemetry, alerts, notification routes, energy reports, audit trail); schema from its EF migrations.
+// Store-centric model (stores, telemetry, alerts, notification routes, kitchen operations, energy planning, compliance,
+// audit trail); schema from its EF migrations.
 public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbContext> options) : DbContext(options)
 {
     public DbSet<Alert> Alerts => Set<Alert>();
@@ -26,6 +28,9 @@ public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbC
         modelBuilder.MapAlerts();
         modelBuilder.MapEnergyReports();
         modelBuilder.MapAuditLog();
+        modelBuilder.MapKitchenOperations();
+        modelBuilder.MapEnergyPlanning();
+        modelBuilder.MapCompliance();
         modelBuilder.HasDefaultSchema("store_management");
         var stores = modelBuilder.Entity<Store>();
         stores.ToTable("stores");
@@ -35,6 +40,8 @@ public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbC
         stores.Property(s => s.Address).HasMaxLength(300).IsRequired();
         stores.Property(s => s.OwnerUserId).HasConversion(id => id.Value, value => UserId.From(value)).HasMaxLength(100).IsRequired();
         stores.HasIndex(s => new { s.OwnerUserId, s.Id });
+        stores.Property(s => s.LayoutWidth).HasDefaultValue(Store.DefaultLayoutWidth);
+        stores.Property(s => s.LayoutHeight).HasDefaultValue(Store.DefaultLayoutHeight);
         var areas = modelBuilder.Entity<StoreArea>();
         areas.ToTable("areas");
         areas.HasKey(a => a.Id);
@@ -57,6 +64,7 @@ public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbC
             t.Property(x => x.NormalLimitAmps); t.Property(x => x.AlertLimitAmps);
         });
         equipment.Navigation(e => e.Thresholds).IsRequired();
+        equipment.Ignore(e => e.Placement);
         var bindings = modelBuilder.Entity<EquipmentDeviceBinding>();
         bindings.ToTable("device_bindings");
         bindings.HasKey(b => b.Id);

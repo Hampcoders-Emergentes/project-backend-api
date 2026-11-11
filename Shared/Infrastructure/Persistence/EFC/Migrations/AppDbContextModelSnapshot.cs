@@ -1733,6 +1733,73 @@ namespace Hampcoders.Electrolink.API.Shared.Infrastructure.Persistence.EFC.Migra
                     b.ToTable("outbox_messages");
                 });
 
+            modelBuilder.Entity("Hampcoders.Electrolink.API.Subscriptions.Domain.Model.Aggregates.ContactRequest", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Company")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("company");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("message");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("NotifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("notified_at_utc");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("phone");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at_utc");
+
+                    b.Property<string>("SourceIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("source_ip");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_sp_contact_requests");
+
+                    b.HasIndex("ReceivedAtUtc")
+                        .HasDatabaseName("i_x_sp_contact_requests_received_at_utc");
+
+                    b.HasIndex("Email", "ReceivedAtUtc")
+                        .HasDatabaseName("i_x_sp_contact_requests_email_received_at_utc");
+
+                    b.ToTable("sp_contact_requests", (string)null);
+                });
+
             modelBuilder.Entity("Hampcoders.Electrolink.API.Subscriptions.Domain.Model.Aggregates.PaymentRecord", b =>
                 {
                     b.Property<string>("PaymentRecordId")

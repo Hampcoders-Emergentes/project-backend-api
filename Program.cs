@@ -156,12 +156,14 @@ foreach (var allowlistKey in new[] { "EdgeApi:EquipmentReadings:AllowedDeviceIds
         app.Logger.LogWarning("{AllowlistKey} has no device IDs: edge requests it guards will get 403. Use indexed entries ({AllowlistKey}:0).", allowlistKey, allowlistKey);
 }
 
-// DB schema: versioned EF Core migrations for both contexts (no EnsureCreated).
-// Set Database:MigrateOnStartup=false to run `dotnet ef database update` as a separate deployment step instead.
+// DB schema. AppDbContext is created from its current model (EnsureCreated): it only acts on an empty database
+// and never updates an existing one. It must run first: once any table exists it skips everything.
+// StoreManagementDbContext then applies its versioned EF Core migrations.
+// Set Database:MigrateOnStartup=false to manage the schema as a separate deployment step instead.
 if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 {
     using var scope = app.Services.CreateScope();
-    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
     scope.ServiceProvider.GetRequiredService<Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.StoreManagementDbContext>().Database.Migrate();
 }
 
@@ -180,6 +182,8 @@ app.UseAuthentication();
 app.UseAuditLogging();
 app.UseRequestAuthorization();
 app.UseAuthorization();
+// Endpoint rate limits (public demo request form).
+app.UseRateLimiter();
 app.MapControllers();
 // RequestAuthorizationMiddleware only honours the IAM attribute, so the docs endpoints are marked with it.
 var anonymousDocs = new Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AllowAnonymousAttribute();
