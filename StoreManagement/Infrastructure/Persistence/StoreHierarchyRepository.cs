@@ -36,6 +36,8 @@ public sealed class StoreHierarchyRepository(StoreManagementDbContext context) :
         Areas(actor, storeId).OrderBy(a => a.Id).Skip(skip).Take(take).ToListAsync(ct);
     public Task<List<ElectricalEquipment>> ListEquipmentAsync(UserId actor, string storeId, string areaId, int skip, int take, CancellationToken ct) =>
         Equipment(actor, storeId, areaId).OrderBy(e => e.Id).Skip(skip).Take(take).ToListAsync(ct);
+    public Task<string?> StoreNameAsync(string storeId, CancellationToken ct) =>
+        context.Stores.AsNoTracking().Where(s => s.Id == storeId).Select(s => (string?)s.Name).SingleOrDefaultAsync(ct);
     public void Add(Store store) => context.Stores.Add(store);
     public void Add(StoreArea area) => context.Areas.Add(area);
     public void Add(ElectricalEquipment equipment) => context.Equipment.Add(equipment);

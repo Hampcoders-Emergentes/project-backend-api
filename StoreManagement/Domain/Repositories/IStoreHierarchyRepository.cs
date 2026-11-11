@@ -12,6 +12,8 @@ public interface IStoreHierarchyRepository
     Task<List<Store>> ListStoresAsync(UserId actor, int skip, int take, CancellationToken ct);
     Task<List<StoreArea>> ListAreasAsync(UserId actor, string storeId, int skip, int take, CancellationToken ct);
     Task<List<ElectricalEquipment>> ListEquipmentAsync(UserId actor, string storeId, string areaId, int skip, int take, CancellationToken ct);
+    /// <summary>Name of the store without ownership check (internal jobs).</summary>
+    Task<string?> StoreNameAsync(string storeId, CancellationToken ct);
     void Add(Store store);
     void Add(StoreArea area);
     void Add(ElectricalEquipment equipment);
