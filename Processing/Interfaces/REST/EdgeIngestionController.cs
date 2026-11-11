@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Processing.Application.Internal.CommandServices;
 using Hampcoders.Electrolink.API.Processing.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Processing.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Processing.Domain.Model.ValueObjects;
@@ -49,6 +50,25 @@ public class EdgeIngestionController(
             return accepted ? NoContent() : Conflict(new { message = "Reading rejected." });
         }
         catch (KeyNotFoundException e) { return NotFound(new { message = e.Message }); }
+    }
+
+    /// <summary>
+    ///     Replays readings the panel buffered while the store was offline. Idempotent per readingId: resending a batch
+    ///     returns DUPLICATE for readings already stored. Per-reading results are returned in request order.
+    /// </summary>
+    [HttpPost("sync-batch")]
+    [ApiDocOperation(Summary = "Synchronize readings buffered during a connection loss", OperationId = "SyncOfflineReadingsBatch")]
+    [ProducesResponseType(typeof(OfflineSyncResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SyncOfflineBatch([FromBody] SyncOfflineReadingsBatchResource resource,
+        [FromServices] OfflineReadingsSyncCommandService sync)
+    {
+        var command = new SyncOfflineReadingsBatchCommand(resource.PanelId, resource.Readings.Select(r => new OfflineReading(
+            r.DeviceId, r.ReadingId, r.Timestamp, r.Voltage, r.Current, r.PowerFactor, r.Frequency, r.Source, r.LeakageCurrentAmps)).ToList());
+        try { return Ok(await sync.Handle(command, HttpContext.RequestAborted)); }
+        // A concurrent writer stored one of these readings first; retrying the same batch is safe.
+        catch (EquipmentConflictException e) { return Conflict(new { message = e.Message }); }
+        catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 
     [HttpPost("anomalies")]

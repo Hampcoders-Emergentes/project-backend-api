@@ -10,6 +10,8 @@ public sealed class Store
     public string Name { get; private set; } = null!;
     public string Address { get; private set; } = null!;
     public UserId OwnerUserId { get; private set; } = null!;
+    /// <summary>Last time the store's edge panel replayed readings buffered during a connection loss.</summary>
+    public DateTime? LastEdgeSyncAtUtc { get; private set; }
     private Store() { }
     public static Store Register(UserId ownerUserId, string name, string address) => new()
     {

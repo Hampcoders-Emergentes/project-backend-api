@@ -4,7 +4,7 @@ using Hampcoders.Electrolink.API.StoreManagement.Domain.Repositories;
 
 namespace Hampcoders.Electrolink.API.StoreManagement.Application;
 
-public sealed record StoreResource(string Id, string Name, string Address, string OwnerUserId);
+public sealed record StoreResource(string Id, string Name, string Address, string OwnerUserId, DateTime? LastEdgeSyncAtUtc);
 public sealed record AreaResource(string Id, string StoreId, string Name);
 public sealed record EquipmentResource(string Id, string AreaId, string Name);
 public sealed record HierarchyPage<T>(IReadOnlyList<T> Items, int Page, int PageSize, bool HasMore);
@@ -93,7 +93,7 @@ public sealed class StoreHierarchyService(IStoreHierarchyRepository repository)
     }
     private static HierarchyPage<TResource> Page<TEntity, TResource>(List<TEntity> rows, int page, int size, Func<TEntity, TResource> map) =>
         new(rows.Take(size).Select(map).ToArray(), page, size, rows.Count > size);
-    private static StoreResource Resource(Store s) => new(s.Id, s.Name, s.Address, s.OwnerUserId.Value);
+    private static StoreResource Resource(Store s) => new(s.Id, s.Name, s.Address, s.OwnerUserId.Value, s.LastEdgeSyncAtUtc);
     private static AreaResource Resource(StoreArea a) => new(a.Id, a.StoreId, a.Name);
     private static EquipmentResource Resource(ElectricalEquipment e) => new(e.Id, e.AreaId, e.Name);
 }

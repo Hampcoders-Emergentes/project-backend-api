@@ -12,7 +12,21 @@ public sealed record DeviceBindingResource(string Id, string EquipmentId, string
     string EdgeDeviceId, DateTime LinkedAtUtc);
 public sealed record EquipmentMeasurementResource(string ReadingId, DateTime CapturedAtUtc, DateTime ReceivedAtUtc,
     string TimestampBasis, float Voltage, float Current, float PowerFactor, float Frequency, string Source,
-    float ActivePowerKw, string? DetectedAnomalyType, string? DetectedSeverity);
+    float ActivePowerKw, string? DetectedAnomalyType, string? DetectedSeverity, float? LeakageCurrentAmps);
+/// <summary>One reading sent by an edge panel (live or replayed after a connection loss).</summary>
+public sealed record EdgeReadingInput(string DeviceId, string ReadingId, DateTime Timestamp, float Voltage, float Current,
+    float PowerFactor, float Frequency, string Source, float? LeakageCurrentAmps);
+
+/// <param name="Status">ACCEPTED, DUPLICATE, CONFLICT, REJECTED or UNBOUND.</param>
+public sealed record EdgeReadingOutcome(string ReadingId, string Status, string? Reason)
+{
+    public const string Accepted = "ACCEPTED";
+    public const string Duplicate = "DUPLICATE";
+    public const string Conflict = "CONFLICT";
+    public const string Rejected = "REJECTED";
+    public const string Unbound = "UNBOUND";
+}
+
 public sealed record EquipmentTelemetryResource(string EquipmentId, string State, DeviceBindingResource? Binding,
     EquipmentMeasurementResource? LastMeasurement);
 
@@ -46,7 +60,7 @@ public sealed class EquipmentTelemetryService(StoreHierarchyService hierarchy, I
             ? "STALE" : last.AnomalyType == null ? "NORMAL" : "ANOMALY";
         return new(equipmentId, state, link == null ? null : Resource(link), last == null ? null : new(last.ReadingId,
             last.CapturedAtUtc, last.ReceivedAtUtc, last.TimestampBasis, last.Voltage, last.Current, last.PowerFactor,
-            last.Frequency, last.Source, last.AsReading().ActivePowerKw, last.AnomalyType, last.Severity));
+            last.Frequency, last.Source, last.AsReading().ActivePowerKw, last.AnomalyType, last.Severity, last.LeakageCurrentAmps));
     }
     public async Task<HierarchyPage<MeasurementHistoryResource>> GetHistory(UserId actor, string storeId, string areaId,
         string equipmentId, MeasurementHistoryQuery query, CancellationToken ct)
@@ -78,14 +92,14 @@ public sealed class EquipmentTelemetryService(StoreHierarchyService hierarchy, I
         if (link == null) return false;
         var thresholds = await repository.ThresholdsOf(link.EquipmentId, ct);
         var reading = EquipmentMeasurement.Capture(link, input.ReadingId, input.Timestamp, input.Voltage, input.Current,
-            input.PowerFactor, input.Frequency, input.Source, DateTime.UtcNow);
+            input.PowerFactor, input.Frequency, input.Source, DateTime.UtcNow, input.LeakageCurrentAmps);
         var existing = await repository.FindReading(link.Id, input.ReadingId, ct);
         if (existing != null) { if (!existing.SamePayload(reading)) throw new EquipmentConflictException(); return true; }
         if (DateTime.UtcNow - reading.CapturedAtUtc <= TimeSpan.FromMinutes(thresholds.DisconnectionThresholdMin))
         {
             var window = (await repository.Recent(link.Id, ct)).Where(r => r.CapturedAtUtc <= reading.CapturedAtUtc)
                 .Take(119).Select(r => r.AsReading()).Append(reading.AsReading()).ToArray();
-            var detection = ElectricalAnomalyRules.Detect(reading.AsReading(), window, thresholds);
+            var detection = ElectricalAnomalyRules.Detect(reading.AsReading(), window, thresholds, reading.LeakageCurrentAmps);
             reading.RecordDetection(detection?.type.ToString(), detection?.severity.ToString());
             if (detection != null)
                 await alerts.Stage(new(link.Id, reading.ReadingId, link.EquipmentId, link.OwnerUserId,
@@ -95,6 +109,84 @@ public sealed class EquipmentTelemetryService(StoreHierarchyService hierarchy, I
         // The measurement and its alert are committed; only now may subscribers be told about the alert.
         await alerts.PublishCommitted(ct);
         return true;
+    }
+
+    /// <summary>
+    ///     Replays readings buffered by an edge panel during a connection loss. Readings keep their original capture
+    ///     time and are idempotent per (sensor, readingId): a resent identical reading is a DUPLICATE, a resent reading
+    ///     with different values is a CONFLICT. Accepted readings are committed in one transaction, then the stores
+    ///     involved record the synchronization time. Readings of sensors not linked to equipment are returned as
+    ///     UNBOUND for the caller's legacy path.
+    /// </summary>
+    public async Task<IReadOnlyList<EdgeReadingOutcome>> IngestBatch(IReadOnlyList<EdgeReadingInput> inputs, CancellationToken ct)
+    {
+        var outcomes = new EdgeReadingOutcome[inputs.Count];
+        var now = DateTime.UtcNow;
+        var touchedEquipment = new HashSet<string>(StringComparer.Ordinal);
+        var indexed = inputs.Select((input, index) => (input, index)).ToList();
+        foreach (var device in indexed.GroupBy(x => x.input.DeviceId ?? "", StringComparer.Ordinal))
+        {
+            EquipmentDeviceBinding? link;
+            try { link = await MachineLink(device.Key, ct); }
+            catch (EquipmentAccessException e)
+            {
+                foreach (var (input, index) in device) outcomes[index] = new(input.ReadingId, EdgeReadingOutcome.Rejected, e.Message);
+                continue;
+            }
+            if (link == null)
+            {
+                foreach (var (input, index) in device) outcomes[index] = new(input.ReadingId, EdgeReadingOutcome.Unbound, null);
+                continue;
+            }
+            var thresholds = await repository.ThresholdsOf(link.EquipmentId, ct);
+            var ids = device.Select(x => x.input.ReadingId).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList();
+            var stored = (await repository.FindReadings(link.Id, ids, ct)).ToDictionary(r => r.ReadingId, StringComparer.Ordinal);
+            var window = (await repository.Recent(link.Id, ct)).Select(r => r.AsReading()).ToList();
+            var accepted = new Dictionary<string, EquipmentMeasurement>(StringComparer.Ordinal);
+            var synchronized = false;
+            // Chronological order so window-based rules see the same history they would have seen live.
+            foreach (var (input, index) in device.OrderBy(x => x.input.Timestamp).ThenBy(x => x.input.ReadingId, StringComparer.Ordinal))
+            {
+                EquipmentMeasurement reading;
+                try
+                {
+                    reading = EquipmentMeasurement.Capture(link, input.ReadingId, input.Timestamp, input.Voltage, input.Current,
+                        input.PowerFactor, input.Frequency, input.Source, now, input.LeakageCurrentAmps);
+                }
+                catch (ArgumentException e) { outcomes[index] = new(input.ReadingId, EdgeReadingOutcome.Rejected, e.Message); continue; }
+                var previous = stored.GetValueOrDefault(reading.ReadingId) ?? accepted.GetValueOrDefault(reading.ReadingId);
+                if (previous != null)
+                {
+                    var same = previous.SamePayload(reading);
+                    synchronized |= same;
+                    outcomes[index] = same
+                        ? new(input.ReadingId, EdgeReadingOutcome.Duplicate, null)
+                        : new(input.ReadingId, EdgeReadingOutcome.Conflict, "A different reading with this readingId already exists.");
+                    continue;
+                }
+                var live = now - reading.CapturedAtUtc <= TimeSpan.FromMinutes(thresholds.DisconnectionThresholdMin);
+                var current = reading.AsReading();
+                var detection = live
+                    ? ElectricalAnomalyRules.Detect(current, window.Where(r => r.Timestamp <= current.Timestamp)
+                        .OrderByDescending(r => r.Timestamp).Take(119).Append(current).ToArray(), thresholds, reading.LeakageCurrentAmps)
+                    // Historical readings: only rules that do not depend on the current time are meaningful.
+                    : ElectricalAnomalyRules.DetectInstantaneous(current, thresholds, reading.LeakageCurrentAmps);
+                reading.RecordDetection(detection?.type.ToString(), detection?.severity.ToString());
+                if (detection != null)
+                    await alerts.Stage(new(link.Id, reading.ReadingId, link.EquipmentId, link.OwnerUserId,
+                        reading.AnomalyType!, reading.Severity!, reading.CapturedAtUtc, reading.ReceivedAtUtc), ct, live);
+                repository.Add(reading);
+                accepted[reading.ReadingId] = reading;
+                window.Add(current);
+                synchronized = true;
+                outcomes[index] = new(input.ReadingId, EdgeReadingOutcome.Accepted, null);
+            }
+            if (synchronized) touchedEquipment.Add(link.EquipmentId);
+        }
+        await repository.Save(ct);
+        if (touchedEquipment.Count > 0) await repository.MarkStoresSynchronized(touchedEquipment, now, ct);
+        await alerts.PublishCommitted(ct);
+        return outcomes;
     }
     public async Task<DeviceThresholdResource?> TryThresholds(string edgeId, CancellationToken ct)
     {

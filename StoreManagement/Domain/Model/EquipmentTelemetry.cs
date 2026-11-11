@@ -39,12 +39,17 @@ public sealed class EquipmentMeasurement
     public string Source { get; private set; } = null!;
     public string? AnomalyType { get; private set; }
     public string? Severity { get; private set; }
+    /// <summary>Residual (earth leakage) current in amps; null when the panel has no differential sensor.</summary>
+    public float? LeakageCurrentAmps { get; private set; }
     private EquipmentMeasurement() { }
     public static EquipmentMeasurement Capture(EquipmentDeviceBinding binding, string readingId, DateTime capturedAt,
-        float voltage, float current, float powerFactor, float frequency, string source, DateTime receivedAt)
+        float voltage, float current, float powerFactor, float frequency, string source, DateTime receivedAt,
+        float? leakageCurrentAmps = null)
     {
         if (!float.IsFinite(voltage) || !float.IsFinite(current) || !float.IsFinite(powerFactor) || !float.IsFinite(frequency))
             throw new ArgumentException("Measurements must be finite.");
+        if (leakageCurrentAmps is { } leakage && (!float.IsFinite(leakage) || leakage < 0))
+            throw new ArgumentException("Leakage current must be a finite, non-negative number.");
         if (!Enum.GetNames<EReadingSource>().Contains(source, StringComparer.Ordinal)) throw new ArgumentException("Invalid reading source.");
         if (string.IsNullOrWhiteSpace(readingId) || readingId.Length > 100) throw new ArgumentException("Invalid readingId.");
         var utc = capturedAt.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(capturedAt, DateTimeKind.Utc) : capturedAt.ToUniversalTime();
@@ -55,11 +60,13 @@ public sealed class EquipmentMeasurement
             voltage, current, powerFactor, frequency, Enum.Parse<EReadingSource>(source));
         return new EquipmentMeasurement { BindingId = binding.Id, ReadingId = readingId, CapturedAtUtc = utc,
             ReceivedAtUtc = receivedAt, TimestampBasis = capturedAt.Kind == DateTimeKind.Unspecified ? "EDGE_UTC_ASSUMED" : "EXPLICIT_OFFSET",
-            Voltage = voltage, Current = current, PowerFactor = powerFactor, Frequency = frequency, Source = source };
+            Voltage = voltage, Current = current, PowerFactor = powerFactor, Frequency = frequency, Source = source,
+            LeakageCurrentAmps = leakageCurrentAmps };
     }
     public Reading AsReading() => Reading.Create(Processing.Domain.Model.ValueObjects.ReadingId.From(ReadingId),
         StreamId.From(BindingId), CapturedAtUtc, Voltage, Current, PowerFactor, Frequency, Enum.Parse<EReadingSource>(Source));
     public bool SamePayload(EquipmentMeasurement other) => CapturedAtUtc == other.CapturedAtUtc && Voltage == other.Voltage
-        && Current == other.Current && PowerFactor == other.PowerFactor && Frequency == other.Frequency && Source == other.Source;
+        && Current == other.Current && PowerFactor == other.PowerFactor && Frequency == other.Frequency && Source == other.Source
+        && LeakageCurrentAmps == other.LeakageCurrentAmps;
     public void RecordDetection(string? type, string? severity) { AnomalyType = type; Severity = severity; }
 }

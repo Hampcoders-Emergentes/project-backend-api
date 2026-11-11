@@ -24,6 +24,7 @@ public static class WebApplicationBuilderExtensions
         builder.Services.AddScoped<IDeviceReadingStreamCommandService, DeviceReadingStreamCommandService>();
         builder.Services.AddScoped<IAnomalyCommandService, AnomalyCommandService>();
         builder.Services.AddScoped<IRelayCommandService, RelayCommandService>();
+        builder.Services.AddScoped<OfflineReadingsSyncCommandService>();
 
         // Query Services
         builder.Services.AddScoped<IIoTMonitoringQueryService, IoTMonitoringQueryService>();
