@@ -2,14 +2,17 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 namespace Hampcoders.Electrolink.API.Shared.Application.Time;
 
-// HTTP interval convention shared by sample and alert histories: UTC, microseconds, at most 31 days.
+// HTTP interval convention shared by sample and alert histories: UTC, microseconds, at most 31 days by default.
 public sealed record ExplicitUtcInterval(DateTime FromUtc, DateTime ToUtc)
 {
-    public static ExplicitUtcInterval Parse(string? from, string? to)
+    public static ExplicitUtcInterval Parse(string? from, string? to) => Parse(from, to, 31);
+
+    /// <summary>Same convention with a different maximum length (e.g. a regulatory dossier covering a year).</summary>
+    public static ExplicitUtcInterval Parse(string? from, string? to, int maxDays)
     {
         var start = Timestamp(from); var end = Timestamp(to);
-        if (start >= end || end - start > TimeSpan.FromDays(31))
-            throw new ArgumentException("from must precede to; interval must not exceed 31 days.");
+        if (start >= end || end - start > TimeSpan.FromDays(maxDays))
+            throw new ArgumentException($"from must precede to; interval must not exceed {maxDays} days.");
         return new(start, end);
     }
     private static DateTime Timestamp(string? value)

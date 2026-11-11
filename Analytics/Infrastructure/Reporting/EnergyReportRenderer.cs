@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Hampcoders.Electrolink.API.Analytics.Application.Internal.OutboundServices;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Reporting;
 
 namespace Hampcoders.Electrolink.API.Analytics.Infrastructure.Reporting;
 
