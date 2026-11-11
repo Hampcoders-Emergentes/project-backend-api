@@ -25,8 +25,22 @@ public class OutboxProcessorBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await ProcessOutboxMessagesAsync(stoppingToken);
-            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); 
+            try
+            {
+                await ProcessOutboxMessagesAsync(stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                // e.g. database unavailable: keep the host alive and try again shortly.
+                _logger.LogError(ex, "Outbox sweep failed; retrying in 10s.");
+                try { await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); }
+                catch (OperationCanceledException) { break; }
+            }
         }
 
         _logger.LogInformation("Outbox Processor Background Service stopped.");
@@ -38,13 +52,12 @@ public class OutboxProcessorBackgroundService : BackgroundService
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
 
+        var due = DateTime.UtcNow;
         var outboxMessages = await dbContext.OutboxMessages
-            .Where(m => m.ProcessedOnUtc == null)
+            .Where(m => m.ProcessedOnUtc == null && m.DeadLetteredOnUtc == null && (m.NextAttemptAtUtc == null || m.NextAttemptAtUtc <= due))
             .OrderBy(m => m.OccurredOnUtc)
             .Take(100)
             .ToListAsync(stoppingToken);
-
-        var now = DateTime.UtcNow;
 
         foreach (var message in outboxMessages)
         {
@@ -65,8 +78,7 @@ public class OutboxProcessorBackgroundService : BackgroundService
                 // Así que el publish es correcto.
                 await mediator.Publish(integrationEvent, stoppingToken);
 
-                message.ProcessedOnUtc = now;
-                message.Error = null;
+                message.MarkProcessed(DateTime.UtcNow);
                 _logger.LogInformation($"Publicado mensaje outbox (MediatR): {integrationEvent.GetType().Name} - {integrationEvent.EventId}");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -76,8 +88,10 @@ public class OutboxProcessorBackgroundService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Error procesando mensaje outbox ID {message.Id}.");
-                message.Error = ex.Message;
-                message.ProcessedOnUtc = now;
+                // A failed message is NOT processed: schedule a retry with backoff, dead-letter after MaxAttempts.
+                message.MarkFailed(ex.Message, DateTime.UtcNow);
+                if (message.DeadLetteredOnUtc != null)
+                    _logger.LogCritical("Mensaje outbox {Id} agotó {Max} intentos y quedó en dead-letter.", message.Id, OutboxMessage.MaxAttempts);
             }
         }
 
