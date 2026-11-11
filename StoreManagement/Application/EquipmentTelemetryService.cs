@@ -12,10 +12,12 @@ public sealed record DeviceBindingResource(string Id, string EquipmentId, string
     string EdgeDeviceId, DateTime LinkedAtUtc);
 public sealed record EquipmentMeasurementResource(string ReadingId, DateTime CapturedAtUtc, DateTime ReceivedAtUtc,
     string TimestampBasis, float Voltage, float Current, float PowerFactor, float Frequency, string Source,
-    float ActivePowerKw, string? DetectedAnomalyType, string? DetectedSeverity, float? LeakageCurrentAmps);
+    float ActivePowerKw, string? DetectedAnomalyType, string? DetectedSeverity, float? LeakageCurrentAmps,
+    float? RelativeHumidityPercent, bool? PanelSurfaceMoistureDetected);
 /// <summary>One reading sent by an edge panel (live or replayed after a connection loss).</summary>
 public sealed record EdgeReadingInput(string DeviceId, string ReadingId, DateTime Timestamp, float Voltage, float Current,
-    float PowerFactor, float Frequency, string Source, float? LeakageCurrentAmps);
+    float PowerFactor, float Frequency, string Source, float? LeakageCurrentAmps, float? RelativeHumidityPercent = null,
+    bool? PanelSurfaceMoistureDetected = null);
 
 /// <param name="Status">ACCEPTED, DUPLICATE, CONFLICT, REJECTED or UNBOUND.</param>
 public sealed record EdgeReadingOutcome(string ReadingId, string Status, string? Reason)
@@ -60,7 +62,8 @@ public sealed class EquipmentTelemetryService(StoreHierarchyService hierarchy, I
             ? "STALE" : last.AnomalyType == null ? "NORMAL" : "ANOMALY";
         return new(equipmentId, state, link == null ? null : Resource(link), last == null ? null : new(last.ReadingId,
             last.CapturedAtUtc, last.ReceivedAtUtc, last.TimestampBasis, last.Voltage, last.Current, last.PowerFactor,
-            last.Frequency, last.Source, last.AsReading().ActivePowerKw, last.AnomalyType, last.Severity, last.LeakageCurrentAmps));
+            last.Frequency, last.Source, last.AsReading().ActivePowerKw, last.AnomalyType, last.Severity, last.LeakageCurrentAmps,
+            last.RelativeHumidityPercent, last.PanelSurfaceMoistureDetected));
     }
     public async Task<HierarchyPage<MeasurementHistoryResource>> GetHistory(UserId actor, string storeId, string areaId,
         string equipmentId, MeasurementHistoryQuery query, CancellationToken ct)
@@ -92,15 +95,18 @@ public sealed class EquipmentTelemetryService(StoreHierarchyService hierarchy, I
         if (link == null) return false;
         var thresholds = await repository.ThresholdsOf(link.EquipmentId, ct);
         var reading = EquipmentMeasurement.Capture(link, input.ReadingId, input.Timestamp, input.Voltage, input.Current,
-            input.PowerFactor, input.Frequency, input.Source, DateTime.UtcNow, input.LeakageCurrentAmps);
+            input.PowerFactor, input.Frequency, input.Source, DateTime.UtcNow, input.LeakageCurrentAmps, input.RelativeHumidityPercent,
+            input.PanelSurfaceMoistureDetected);
         var existing = await repository.FindReading(link.Id, input.ReadingId, ct);
         if (existing != null) { if (!existing.SamePayload(reading)) throw new EquipmentConflictException(); return true; }
         if (DateTime.UtcNow - reading.CapturedAtUtc <= TimeSpan.FromMinutes(thresholds.DisconnectionThresholdMin))
         {
             var window = (await repository.Recent(link.Id, ct)).Where(r => r.CapturedAtUtc <= reading.CapturedAtUtc)
                 .Take(119).Select(r => r.AsReading()).Append(reading.AsReading()).ToArray();
-            var detection = ElectricalAnomalyRules.Detect(reading.AsReading(), window, thresholds, reading.LeakageCurrentAmps);
-            reading.RecordDetection(detection?.type.ToString(), detection?.severity.ToString());
+            var detection = MoistureHazardPolicy.MostSevere(
+                ElectricalAnomalyRules.Detect(reading.AsReading(), window, thresholds, reading.LeakageCurrentAmps),
+                MoistureHazardPolicy.Evaluate(reading.RelativeHumidityPercent, reading.PanelSurfaceMoistureDetected));
+            reading.RecordDetection(detection?.Type, detection?.Severity.ToString());
             if (detection != null)
                 await alerts.Stage(new(link.Id, reading.ReadingId, link.EquipmentId, link.OwnerUserId,
                     reading.AnomalyType!, reading.Severity!, reading.CapturedAtUtc, reading.ReceivedAtUtc), ct);
@@ -151,7 +157,8 @@ public sealed class EquipmentTelemetryService(StoreHierarchyService hierarchy, I
                 try
                 {
                     reading = EquipmentMeasurement.Capture(link, input.ReadingId, input.Timestamp, input.Voltage, input.Current,
-                        input.PowerFactor, input.Frequency, input.Source, now, input.LeakageCurrentAmps);
+                        input.PowerFactor, input.Frequency, input.Source, now, input.LeakageCurrentAmps, input.RelativeHumidityPercent,
+                        input.PanelSurfaceMoistureDetected);
                 }
                 catch (ArgumentException e) { outcomes[index] = new(input.ReadingId, EdgeReadingOutcome.Rejected, e.Message); continue; }
                 var previous = stored.GetValueOrDefault(reading.ReadingId) ?? accepted.GetValueOrDefault(reading.ReadingId);
@@ -166,12 +173,14 @@ public sealed class EquipmentTelemetryService(StoreHierarchyService hierarchy, I
                 }
                 var live = now - reading.CapturedAtUtc <= TimeSpan.FromMinutes(thresholds.DisconnectionThresholdMin);
                 var current = reading.AsReading();
-                var detection = live
+                var electrical = live
                     ? ElectricalAnomalyRules.Detect(current, window.Where(r => r.Timestamp <= current.Timestamp)
                         .OrderByDescending(r => r.Timestamp).Take(119).Append(current).ToArray(), thresholds, reading.LeakageCurrentAmps)
                     // Historical readings: only rules that do not depend on the current time are meaningful.
                     : ElectricalAnomalyRules.DetectInstantaneous(current, thresholds, reading.LeakageCurrentAmps);
-                reading.RecordDetection(detection?.type.ToString(), detection?.severity.ToString());
+                var detection = MoistureHazardPolicy.MostSevere(electrical,
+                    MoistureHazardPolicy.Evaluate(reading.RelativeHumidityPercent, reading.PanelSurfaceMoistureDetected));
+                reading.RecordDetection(detection?.Type, detection?.Severity.ToString());
                 if (detection != null)
                     await alerts.Stage(new(link.Id, reading.ReadingId, link.EquipmentId, link.OwnerUserId,
                         reading.AnomalyType!, reading.Severity!, reading.CapturedAtUtc, reading.ReceivedAtUtc), ct, live);

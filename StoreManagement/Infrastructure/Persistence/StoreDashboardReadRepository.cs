@@ -49,7 +49,8 @@ public sealed class StoreDashboardReadRepository(StoreManagementDbContext contex
             return new EquipmentLiveRow(e.Id, e.Name, e.AreaId, e.AreaName, thresholds,
                 e.BindingId == null ? null : new SensorBindingRow(e.BindingId, e.DeviceId!, e.SerialNumber!, e.EdgeDeviceId!, e.LinkedAtUtc!.Value),
                 last == null ? null : new EquipmentElectricalSnapshot(last.CapturedAtUtc, last.Voltage, last.Current, last.PowerFactor,
-                    last.Frequency, last.LeakageCurrentAmps, last.AnomalyType, last.Severity),
+                    last.Frequency, last.LeakageCurrentAmps, last.AnomalyType, last.Severity, last.RelativeHumidityPercent,
+                    last.PanelSurfaceMoistureDetected),
                 e.BindingId != null && receivedBy.TryGetValue(e.BindingId, out var at) ? at : null);
         }).ToList();
     }

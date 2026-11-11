@@ -64,7 +64,8 @@ public class EdgeIngestionController(
         [FromServices] OfflineReadingsSyncCommandService sync)
     {
         var command = new SyncOfflineReadingsBatchCommand(resource.PanelId, resource.Readings.Select(r => new OfflineReading(
-            r.DeviceId, r.ReadingId, r.Timestamp, r.Voltage, r.Current, r.PowerFactor, r.Frequency, r.Source, r.LeakageCurrentAmps)).ToList());
+            r.DeviceId, r.ReadingId, r.Timestamp, r.Voltage, r.Current, r.PowerFactor, r.Frequency, r.Source, r.LeakageCurrentAmps,
+            r.RelativeHumidityPercent, r.PanelSurfaceMoistureDetected)).ToList());
         try { return Ok(await sync.Handle(command, HttpContext.RequestAborted)); }
         // A concurrent writer stored one of these readings first; retrying the same batch is safe.
         catch (EquipmentConflictException e) { return Conflict(new { message = e.Message }); }

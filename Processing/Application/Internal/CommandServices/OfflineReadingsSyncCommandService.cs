@@ -26,7 +26,8 @@ public sealed class OfflineReadingsSyncCommandService(EquipmentTelemetryService 
             throw new ArgumentException("Every reading requires deviceId and readingId.");
 
         var outcomes = await equipmentTelemetry.IngestBatch(command.Readings.Select(r => new EdgeReadingInput(r.DeviceId, r.ReadingId,
-            r.Timestamp, r.Voltage, r.Current, r.PowerFactor, r.Frequency, r.Source, r.LeakageCurrentAmps)).ToList(), ct);
+            r.Timestamp, r.Voltage, r.Current, r.PowerFactor, r.Frequency, r.Source, r.LeakageCurrentAmps, r.RelativeHumidityPercent,
+            r.PanelSurfaceMoistureDetected)).ToList(), ct);
 
         var results = new OfflineReadingResult[outcomes.Count];
         // Legacy streams keep their own ordering rules: replay them chronologically, one at a time.

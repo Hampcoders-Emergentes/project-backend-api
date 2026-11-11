@@ -20,7 +20,8 @@ public static class EquipmentRiskLevel
 
 /// <summary>Latest electrical values of the equipment, as stored from telemetry.</summary>
 public sealed record EquipmentElectricalSnapshot(DateTime CapturedAtUtc, float Voltage, float Current, float PowerFactor,
-    float Frequency, float? LeakageCurrentAmps, string? AnomalyType, string? AnomalySeverity);
+    float Frequency, float? LeakageCurrentAmps, string? AnomalyType, string? AnomalySeverity,
+    float? RelativeHumidityPercent = null, bool? PanelSurfaceMoistureDetected = null);
 
 /// <summary>Everything the risk policy needs; no persistence or framework types.</summary>
 public sealed record EquipmentRiskInput(bool HasSensor, ThresholdConfig Thresholds, EquipmentElectricalSnapshot? Last,
@@ -52,6 +53,7 @@ public static class EquipmentRiskPolicy
             critical.Add($"Leakage current {leak:0.###} A reaches the alert limit of {t.AlertLimitAmps:0.###} A.");
         if (last.Current > t.MaxCurrentAmps && last.PowerFactor < 0.7f)
             critical.Add("Overcurrent with a very low power factor (short-circuit risk).");
+        if (last.PanelSurfaceMoistureDetected == true) critical.Add("Moisture detected on the electrical panel surface.");
         if (critical.Count > 0) return new(EquipmentRiskLevel.CriticalRisk, critical);
 
         var warnings = new List<string>();
@@ -63,6 +65,8 @@ public static class EquipmentRiskPolicy
         if (last.Voltage > t.NominalVoltage * 1.10f || last.Voltage < t.NominalVoltage * 0.90f)
             warnings.Add($"Voltage {last.Voltage:0.#} V is outside ±10% of {t.NominalVoltage:0.#} V.");
         if (last.PowerFactor < t.MinPowerFactor) warnings.Add($"Power factor {last.PowerFactor:0.##} is below {t.MinPowerFactor:0.##}.");
+        if (last.RelativeHumidityPercent is { } humidity && humidity >= MoistureHazardPolicy.WarningRelativeHumidityPercent)
+            warnings.Add($"Relative humidity {humidity:0.#}% near the panel is at or above {MoistureHazardPolicy.WarningRelativeHumidityPercent:0}%.");
         return warnings.Count > 0
             ? new(EquipmentRiskLevel.Warning, warnings)
             : new(EquipmentRiskLevel.Safe, ["Operating within configured limits."]);

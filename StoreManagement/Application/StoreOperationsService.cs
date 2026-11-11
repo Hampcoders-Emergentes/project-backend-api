@@ -9,7 +9,8 @@ public sealed record GetStoreElectricalGridStatusQuery(UserId Actor, string Stor
 public sealed record GetSensorsConnectivityQuery(UserId Actor, string StoreId);
 
 public sealed record ElectricalReadingResource(DateTime CapturedAtUtc, float Voltage, float Current, float PowerFactor,
-    float Frequency, double ActivePowerKw, float? LeakageCurrentAmps, string? DetectedAnomalyType, string? DetectedSeverity);
+    float Frequency, double ActivePowerKw, float? LeakageCurrentAmps, string? DetectedAnomalyType, string? DetectedSeverity,
+    float? RelativeHumidityPercent = null, bool? PanelSurfaceMoistureDetected = null);
 
 /// <param name="OperationalState">UNMONITORED, UNKNOWN, STALE, NORMAL or ANOMALY (same vocabulary as the dashboard).</param>
 /// <param name="RiskLevel">SAFE, WARNING, CRITICAL_RISK, DISCONNECTED or UNKNOWN.</param>
@@ -105,11 +106,18 @@ public sealed class StoreOperationsService(StoreHierarchyService hierarchy, ISto
             sensors.Count(s => s.Status == "DISCONNECTED"), store?.LastEdgeSyncAtUtc, sensors);
     }
 
-    private static EquipmentRiskAssessment Assess(EquipmentLiveRow row, EquipmentAlertCounts? counts, DateTime now) =>
+    /// <summary>Active alerts of the whole store (the caller has authorized the store).</summary>
+    public async Task<EquipmentAlertCounts> ActiveAlertTotals(UserId actor, string storeId, CancellationToken ct)
+    {
+        var counts = await alertSummary.OpenAlertCountsByEquipment(actor, storeId, ct);
+        return new(counts.Values.Sum(c => c.Critical), counts.Values.Sum(c => c.NonCritical));
+    }
+
+    internal static EquipmentRiskAssessment Assess(EquipmentLiveRow row, EquipmentAlertCounts? counts, DateTime now) =>
         EquipmentRiskPolicy.Evaluate(new EquipmentRiskInput(row.Sensor != null, row.Thresholds, row.Last,
             counts?.Critical ?? 0, counts?.NonCritical ?? 0), now);
 
-    private static string State(EquipmentLiveRow row, DateTime now) =>
+    internal static string State(EquipmentLiveRow row, DateTime now) =>
         row.Sensor == null ? "UNMONITORED"
         : row.Last == null ? "UNKNOWN"
         : now - row.Last.CapturedAtUtc > TimeSpan.FromMinutes(row.Thresholds.DisconnectionThresholdMin) ? "STALE"
@@ -121,7 +129,7 @@ public sealed class StoreOperationsService(StoreHierarchyService hierarchy, ISto
     private static double? Average(IReadOnlyCollection<EquipmentElectricalSnapshot> samples, Func<EquipmentElectricalSnapshot, float> value) =>
         samples.Count == 0 ? null : Math.Round(samples.Average(s => (double)value(s)), 3);
 
-    private static ElectricalReadingResource? Reading(EquipmentElectricalSnapshot? s) => s == null ? null
+    internal static ElectricalReadingResource? Reading(EquipmentElectricalSnapshot? s) => s == null ? null
         : new(s.CapturedAtUtc, s.Voltage, s.Current, s.PowerFactor, s.Frequency, Math.Round(ActiveKw(s), 4), s.LeakageCurrentAmps,
-            s.AnomalyType, s.AnomalySeverity);
+            s.AnomalyType, s.AnomalySeverity, s.RelativeHumidityPercent, s.PanelSurfaceMoistureDetected);
 }
