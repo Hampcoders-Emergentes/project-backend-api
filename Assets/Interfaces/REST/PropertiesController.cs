@@ -7,7 +7,7 @@ using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 
@@ -15,7 +15,7 @@ namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 [Route("api/v1/homeowners/{ownerId}/[controller]")]
 [Route("api/v1/companies/{ownerId}/[controller]")]
 [Produces("application/json")]
-[SwaggerTag("Properties Controller Endpoints")]
+[ApiDocTag("Properties Controller Endpoints")]
 // M3.22: the route owner must be the authenticated actor's own HomeOwner/Company subject (PropertyOwnerRoute);
 // a foreign or missing property is also a generic 404.
 public class PropertiesController(

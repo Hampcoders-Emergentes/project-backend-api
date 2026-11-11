@@ -6,7 +6,7 @@ using Hampcoders.Electrolink.API.Profiles.Domain.Services;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.REST.Transform;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Profiles.Interfaces.REST;
 
@@ -14,7 +14,7 @@ namespace Hampcoders.Electrolink.API.Profiles.Interfaces.REST;
 [ApiController]
 [Route("api/v1/staff-members")]
 [Produces(MediaTypeNames.Application.Json)]
-[SwaggerTag("Staff Member Management (Admin only)")]
+[ApiDocTag("Staff Member Management (Admin only)")]
 public class StaffMembersController(
     IStaffMemberCommandService staffMemberCommandService,
     IStaffMemberQueryService staffMemberQueryService) : ControllerBase
@@ -23,7 +23,7 @@ public class StaffMembersController(
     [RequireAccessRole(
         Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects.AccessRole.Admin,
         Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects.AccessRole.SuperAdmin)]
-    [SwaggerOperation(Summary = "Create a staff member profile")]
+    [ApiDocOperation(Summary = "Create a staff member profile")]
     public async Task<IActionResult> CreateStaffMember([FromBody] CreateStaffMemberResource resource)
     {
         try

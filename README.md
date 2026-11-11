@@ -9,7 +9,7 @@ tags:
 - aspnet-core 
 stack:
   - C#
-  - .NET 8/9
+  - .NET 11
   - ASP.NET Core
   - Entity Framework Core
   - PostgreSQL
@@ -17,7 +17,7 @@ stack:
   - SQL Server
   - MediatR
   - FluentValidation
-  - Swagger/OpenAPI
+  - OpenAPI (built-in) with Scalar UI at /scalar/v1
   - Serilog 
 principles:
 - "[[Domain-Driven Design]]"
@@ -1431,7 +1431,7 @@ public class ProductsControllerE2ETests : IClassFixture<WebApplicationFactory<Pr
 - **MediatR:** In-process messaging for implementing CQRS and mediator patterns. Decouples command/query senders from handlers.
 - **FluentValidation:** Strongly-typed validation rules for commands and resources. More expressive than Data Annotations.
 - **AutoMapper:** Object-to-object mapping (alternative to manual Assemblers). Reduces boilerplate for simple transformations.
-- **Swashbuckle (Swagger):** Automatic API documentation generation from controller attributes. Essential for API discoverability.
+- **Microsoft.AspNetCore.OpenApi + Scalar:** OpenAPI document at `/openapi/v1.json`, interactive reference at `/scalar/v1`. Endpoint docs come from `[ApiDocOperation]`, `[ApiDocResponse]` and `[ProducesResponseType]`.
 - **Serilog:** Structured logging framework with rich sinks (file, database, cloud). Superior to default .NET logging.
 - **Bogus:** Fake data generation for testing. Creates realistic test entities quickly.
 - **xUnit / NUnit:** Unit testing frameworks. xUnit is more modern and preferred for .NET Core.
