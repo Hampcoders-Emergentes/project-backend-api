@@ -3,6 +3,9 @@ namespace Hampcoders.Electrolink.API.AlertManagement.Domain;
 
 public sealed record AlertScope(UserId Actor, string StoreId, string AreaId, string EquipmentId);
 public sealed record StoreAlertScope(UserId Actor, string StoreId, string? EquipmentId = null);
+/// <summary>Alert plus the names people recognise, for messages sent outside the app.</summary>
+public sealed record AlertDescription(Alert Alert, string StoreName, string AreaName, string EquipmentName);
+
 public interface IAlertRepository
 {
     Task<Alert?> BySource(string bindingId, string readingId, CancellationToken ct);
@@ -14,4 +17,9 @@ public interface IAlertRepository
     /// <summary>Store that contains the equipment (alert routing key), or null.</summary>
     Task<string?> StoreIdOfEquipment(string equipmentId, CancellationToken ct);
     Task Acknowledge(AlertScope scope, string id, DateTime now, CancellationToken ct);
+    /// <summary>Open alerts of the store, critical first, newest first.</summary>
+    Task<List<Alert>> ListOpen(StoreAlertScope scope, int take, CancellationToken ct);
+    /// <summary>Unscoped lookup for trusted internal callers (machine dispatch).</summary>
+    Task<Alert?> FindById(string id, CancellationToken ct);
+    Task<AlertDescription?> Describe(string id, CancellationToken ct);
 }

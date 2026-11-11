@@ -19,5 +19,17 @@ public static class AlertMapping
         a.HasIndex(x => new { x.EquipmentId, x.CreatedAtUtc });
         a.HasOne<EquipmentMeasurement>().WithMany().HasForeignKey(x => new { x.BindingId, x.ReadingId }).OnDelete(DeleteBehavior.Restrict);
         a.HasOne<ElectricalEquipment>().WithMany().HasForeignKey(x => x.EquipmentId).OnDelete(DeleteBehavior.Restrict);
+        a.Ignore(x => x.IsCritical); a.Ignore(x => x.IsCriticalLeakage);
+        a.HasIndex(x => new { x.Status, x.Severity, x.CreatedAtUtc });
+
+        var d = model.Entity<AlertDispatch>();
+        d.ToTable("alert_dispatches", "alert_management"); d.HasKey(x => x.Id);
+        d.Property(x => x.Id).HasMaxLength(41);
+        d.Property(x => x.AlertId).HasMaxLength(70).IsRequired(); d.Property(x => x.StoreId).HasMaxLength(38).IsRequired();
+        d.Property(x => x.Channel).HasMaxLength(30).IsRequired(); d.Property(x => x.Destination).HasMaxLength(254).IsRequired();
+        d.Property(x => x.Status).HasMaxLength(20).IsRequired(); d.Property(x => x.LastError).HasMaxLength(500);
+        d.HasIndex(x => new { x.AlertId, x.Channel, x.Destination }).IsUnique();
+        d.HasIndex(x => new { x.Status, x.NextAttemptAtUtc });
+        d.HasOne<Alert>().WithMany().HasForeignKey(x => x.AlertId).OnDelete(DeleteBehavior.Restrict);
     }
 }

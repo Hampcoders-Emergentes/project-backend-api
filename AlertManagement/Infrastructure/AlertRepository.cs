@@ -48,6 +48,18 @@ public sealed class AlertRepository(StoreManagementDbContext context) : IAlertRe
     public Task<string?> StoreIdOfEquipment(string equipmentId, CancellationToken ct) =>
         (from e in context.Equipment.AsNoTracking() join a in context.Areas.AsNoTracking() on e.AreaId equals a.Id
          where e.Id == equipmentId select (string?)a.StoreId).SingleOrDefaultAsync(ct);
+    public Task<List<Alert>> ListOpen(StoreAlertScope scope, int take, CancellationToken ct) =>
+        Scoped(scope.Actor, scope.StoreId, null, scope.EquipmentId).Where(a => a.Status == "OPEN")
+            .OrderBy(a => a.Severity == "CRITICAL" ? 0 : 1).ThenByDescending(a => a.CreatedAtUtc).ThenBy(a => a.Id)
+            .Take(take).ToListAsync(ct);
+    public Task<Alert?> FindById(string id, CancellationToken ct) => context.Alerts.AsNoTracking().SingleOrDefaultAsync(a => a.Id == id, ct);
+    public Task<AlertDescription?> Describe(string id, CancellationToken ct) =>
+        (from alert in context.Alerts.AsNoTracking()
+         join equipment in context.Equipment.AsNoTracking() on alert.EquipmentId equals equipment.Id
+         join area in context.Areas.AsNoTracking() on equipment.AreaId equals area.Id
+         join store in context.Stores.AsNoTracking() on area.StoreId equals store.Id
+         where alert.Id == id
+         select new AlertDescription(alert, store.Name, area.Name, equipment.Name)).SingleOrDefaultAsync(ct);
     public async Task Acknowledge(AlertScope scope, string id, DateTime now, CancellationToken ct)
     {
         now = new DateTime(now.Ticks - now.Ticks % TimeSpan.TicksPerMicrosecond, DateTimeKind.Utc);

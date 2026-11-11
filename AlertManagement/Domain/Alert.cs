@@ -22,6 +22,9 @@ public sealed class Alert
     public string? AcknowledgedByUserId { get; private set; }
     public DateTime? AcknowledgedAtUtc { get; private set; }
     private Alert() { }
+    public bool IsCritical => Severity == "CRITICAL";
+    /// <summary>Critical earth leakage: clients must sound the local alarm immediately.</summary>
+    public bool IsCriticalLeakage => IsCritical && AnomalyType == AlertAnomalyType.CurrentLeakage;
     public static Alert Open(DetectedMeasurement source)
     {
         var severity = source.DetectionSeverity switch { "Critical" => "CRITICAL", "Low" or "Medium" or "High" => "NON_CRITICAL",
@@ -32,7 +35,8 @@ public sealed class Alert
         var key = source.BindingId.Length + ":" + source.BindingId + source.ReadingId;
         return new() { Id = "alert-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant(),
             BindingId = source.BindingId, ReadingId = source.ReadingId, EquipmentId = source.EquipmentId,
-            OwnerUserId = source.OwnerUserId.Value, AnomalyType = source.AnomalyType, DetectionSeverity = source.DetectionSeverity,
+            OwnerUserId = source.OwnerUserId.Value, AnomalyType = AlertAnomalyType.FromDetection(source.AnomalyType),
+            DetectionSeverity = source.DetectionSeverity,
             Severity = severity, CapturedAtUtc = source.CapturedAtUtc, CreatedAtUtc = source.DetectedAtUtc };
     }
     public void Acknowledge(UserId actor, DateTime now)
