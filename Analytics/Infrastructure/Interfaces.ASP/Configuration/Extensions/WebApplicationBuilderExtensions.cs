@@ -35,6 +35,11 @@ public static class WebApplicationBuilderExtensions
         builder.Services.AddScoped<EnergyCostQueryService>();
         builder.Services.AddScoped<EnergyReportCommandService>();
 
+        // Energy planning: opening hours, budgets, period comparison, off-hours detection, predictive maintenance
+        builder.Services.AddScoped<IEnergyPlanningRepository, Hampcoders.Electrolink.API.Analytics.Infrastructure.Persistence.EFC.Planning.EnergyPlanningRepository>();
+        builder.Services.AddScoped<EnergyPlanningCommandService>();
+        builder.Services.AddScoped<EnergyInsightsQueryService>();
+
         // Jobs
         builder.Services.AddScoped<TechnicianMetricsPeriodInitializerJob>();
     }

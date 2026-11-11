@@ -22,6 +22,15 @@ public sealed class StoreMeasurementFacade(StoreHierarchyService hierarchy, ISto
         return new(new Dictionary<string, string> { [item.Id] = item.Name }, Map(rows));
     }
 
+    public async Task<StoreElectricalData> ElectricalSamples(UserId actor, string storeId, DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        await hierarchy.GetStore(actor, storeId, ct);
+        var limits = (await equipment.LiveEquipment(actor, storeId, ct)).Select(e => new EquipmentElectricalLimits(e.EquipmentId, e.Name,
+            e.Thresholds.NominalVoltage, e.Thresholds.MaxCurrentAmps, e.Thresholds.MinPowerFactor)).ToList();
+        var rows = await telemetry.PowerSamples(actor, storeId, fromUtc, toUtc, ct);
+        return new(limits, rows.Select(r => new EquipmentElectricalSample(r.EquipmentId, r.CapturedAtUtc, r.Voltage, r.Current, r.PowerFactor)).ToList());
+    }
+
     // Same formula as the Processing reading model: kW = V * A / 1000 * power factor.
     private static List<EquipmentPowerSample> Map(List<PowerSampleRow> rows) => rows.Select(r => new EquipmentPowerSample(r.EquipmentId,
         r.CapturedAtUtc, (double)r.Voltage * r.Current / 1000.0 * r.PowerFactor)).ToList();
