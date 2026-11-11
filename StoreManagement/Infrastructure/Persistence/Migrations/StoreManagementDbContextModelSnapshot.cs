@@ -89,7 +89,185 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
 
                     b.HasIndex("EquipmentId", "CreatedAtUtc");
 
+                    b.HasIndex("Status", "Severity", "CreatedAtUtc");
+
                     b.ToTable("alerts", "alert_management");
+                });
+
+            modelBuilder.Entity("Hampcoders.Electrolink.API.AlertManagement.Domain.AlertDispatch", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(41)
+                        .HasColumnType("character varying(41)");
+
+                    b.Property<string>("AlertId")
+                        .IsRequired()
+                        .HasMaxLength(70)
+                        .HasColumnType("character varying(70)");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Destination")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SentAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("StoreId")
+                        .IsRequired()
+                        .HasMaxLength(38)
+                        .HasColumnType("character varying(38)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "NextAttemptAtUtc");
+
+                    b.HasIndex("AlertId", "Channel", "Destination")
+                        .IsUnique();
+
+                    b.ToTable("alert_dispatches", "alert_management");
+                });
+
+            modelBuilder.Entity("Hampcoders.Electrolink.API.Analytics.Domain.Model.Aggregates.EnergyReport", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(39)
+                        .HasColumnType("character varying(39)");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("FromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("GeneratedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoreId")
+                        .IsRequired()
+                        .HasMaxLength(38)
+                        .HasColumnType("character varying(38)");
+
+                    b.Property<DateTime>("ToUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAtUtc");
+
+                    b.HasIndex("StoreId", "GeneratedAtUtc");
+
+                    b.ToTable("energy_reports", "analytics");
+                });
+
+            modelBuilder.Entity("Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates.AuditLogEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("HttpMethod")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Resource")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StoreId")
+                        .HasMaxLength(38)
+                        .HasColumnType("character varying(38)");
+
+                    b.Property<DateTime>("TimestampUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StoreId", "TimestampUtc");
+
+                    b.HasIndex("UserId", "TimestampUtc");
+
+                    b.ToTable("audit_log_entries", "audit");
                 });
 
             modelBuilder.Entity("Hampcoders.Electrolink.API.StoreManagement.Domain.Model.ElectricalEquipment", b =>
@@ -196,6 +374,9 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
                     b.Property<float>("Frequency")
                         .HasColumnType("real");
 
+                    b.Property<float?>("LeakageCurrentAmps")
+                        .HasColumnType("real");
+
                     b.Property<float>("PowerFactor")
                         .HasColumnType("real");
 
@@ -237,6 +418,9 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<DateTime?>("LastEdgeSyncAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -277,6 +461,53 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
                     b.ToTable("areas", "store_management");
                 });
 
+            modelBuilder.Entity("Hampcoders.Electrolink.API.StoreManagement.Domain.Model.StoreNotificationPreference", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(42)
+                        .HasColumnType("character varying(42)");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Destination")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RecipientName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("RecipientRole")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("StoreId")
+                        .IsRequired()
+                        .HasMaxLength(38)
+                        .HasColumnType("character varying(38)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UrgencyLevels")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StoreId");
+
+                    b.ToTable("notification_preferences", "store_management");
+                });
+
             modelBuilder.Entity("Hampcoders.Electrolink.API.AlertManagement.Domain.Alert", b =>
                 {
                     b.HasOne("Hampcoders.Electrolink.API.StoreManagement.Domain.Model.ElectricalEquipment", null)
@@ -289,6 +520,24 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
                         .WithMany()
                         .HasForeignKey("BindingId", "ReadingId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Hampcoders.Electrolink.API.AlertManagement.Domain.AlertDispatch", b =>
+                {
+                    b.HasOne("Hampcoders.Electrolink.API.AlertManagement.Domain.Alert", null)
+                        .WithMany()
+                        .HasForeignKey("AlertId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Hampcoders.Electrolink.API.Analytics.Domain.Model.Aggregates.EnergyReport", b =>
+                {
+                    b.HasOne("Hampcoders.Electrolink.API.StoreManagement.Domain.Model.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -365,6 +614,15 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
                         .WithMany()
                         .HasForeignKey("StoreId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Hampcoders.Electrolink.API.StoreManagement.Domain.Model.StoreNotificationPreference", b =>
+                {
+                    b.HasOne("Hampcoders.Electrolink.API.StoreManagement.Domain.Model.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 #pragma warning restore 612, 618

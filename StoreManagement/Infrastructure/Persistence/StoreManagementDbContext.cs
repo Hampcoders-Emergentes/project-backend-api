@@ -1,12 +1,14 @@
 using Hampcoders.Electrolink.API.AlertManagement.Domain;
 using Hampcoders.Electrolink.API.AlertManagement.Infrastructure;
+using Hampcoders.Electrolink.API.Analytics.Infrastructure.Persistence.EFC.Reports;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Auditing;
 using Hampcoders.Electrolink.API.StoreManagement.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 
 namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence;
 
-// Separate additive model: never runs EnsureCreated/Migrate automatically.
+// Store-centric model (stores, telemetry, alerts, notification routes, energy reports, audit trail); schema from its EF migrations.
 public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbContext> options) : DbContext(options)
 {
     public DbSet<Alert> Alerts => Set<Alert>();
@@ -16,10 +18,14 @@ public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbC
 
     public DbSet<EquipmentDeviceBinding> DeviceBindings => Set<EquipmentDeviceBinding>();
     public DbSet<EquipmentMeasurement> Measurements => Set<EquipmentMeasurement>();
+    public DbSet<StoreNotificationPreference> NotificationPreferences => Set<StoreNotificationPreference>();
+    public DbSet<AlertDispatch> AlertDispatches => Set<AlertDispatch>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.MapAlerts();
+        modelBuilder.MapEnergyReports();
+        modelBuilder.MapAuditLog();
         modelBuilder.HasDefaultSchema("store_management");
         var stores = modelBuilder.Entity<Store>();
         stores.ToTable("stores");
@@ -77,5 +83,18 @@ public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbC
         measurements.Property(r => r.Severity).HasMaxLength(30);
         measurements.HasIndex(r => new { r.BindingId, r.CapturedAtUtc });
         measurements.HasOne<EquipmentDeviceBinding>().WithMany().HasForeignKey(r => r.BindingId).OnDelete(DeleteBehavior.Restrict);
+        var preferences = modelBuilder.Entity<StoreNotificationPreference>();
+        preferences.ToTable("notification_preferences");
+        preferences.HasKey(p => p.Id);
+        preferences.Property(p => p.Id).HasMaxLength(42);
+        preferences.Property(p => p.StoreId).HasMaxLength(38).IsRequired();
+        preferences.Property(p => p.Channel).HasMaxLength(30).IsRequired();
+        preferences.Property(p => p.Destination).HasMaxLength(254);
+        preferences.Property(p => p.RecipientRole).HasMaxLength(30).IsRequired();
+        preferences.Property(p => p.RecipientName).HasMaxLength(120);
+        preferences.Property(p => p.UrgencyLevels).HasMaxLength(60).IsRequired();
+        preferences.Ignore(p => p.Urgencies);
+        preferences.HasIndex(p => p.StoreId);
+        preferences.HasOne<Store>().WithMany().HasForeignKey(p => p.StoreId).OnDelete(DeleteBehavior.Cascade);
     }
 }
