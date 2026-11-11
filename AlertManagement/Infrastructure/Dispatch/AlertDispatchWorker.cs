@@ -37,7 +37,8 @@ public sealed class AlertDispatchWorker(IServiceScopeFactory scopes, ILogger<Ale
                 if (!channels.TryGetValue(dispatch.Channel, out var channel))
                     throw new InvalidOperationException($"No adapter for channel {dispatch.Channel}.");
                 var description = await alerts.Describe(dispatch.AlertId, ct) ?? throw new InvalidOperationException("Alert not found.");
-                await channel.DeliverAsync(dispatch.Destination, Compose(description), ct);
+                var message = Compose(description);
+                await channel.DeliverAsync(dispatch.Destination, message with { Details = message.Details! with { StoreId = dispatch.StoreId } }, ct);
                 dispatch.MarkSent(DateTime.UtcNow);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -53,6 +54,7 @@ public sealed class AlertDispatchWorker(IServiceScopeFactory scopes, ILogger<Ale
     {
         var a = d.Alert;
         var label = a.IsCriticalLeakage ? "CRITICAL CURRENT LEAKAGE" : $"{a.Severity} {a.AnomalyType}";
+        if (a.Description != null) label += $" ({a.ReportCategory}: {a.Description})";
         var subject = $"[Electrolink] {label} - {d.EquipmentName} ({d.StoreName})";
         var lines = new List<string>
         {
@@ -63,6 +65,7 @@ public sealed class AlertDispatchWorker(IServiceScopeFactory scopes, ILogger<Ale
         if (a.IsCriticalLeakage) lines.Add("Disconnect the equipment and keep people away until it is inspected.");
         lines.Add("Open the Electrolink dashboard to acknowledge this alert.");
         var body = string.Join('\n', lines);
-        return new(subject, body);
+        return new(subject, body, new ExternalAlertDetails(a.Id, "", d.StoreName, d.AreaName, a.EquipmentId, d.EquipmentName, a.AnomalyType,
+            a.Severity, a.IsCriticalLeakage, a.CapturedAtUtc));
     }
 }

@@ -10,16 +10,24 @@ public static class AlertMapping
         var a = model.Entity<Alert>();
         a.ToTable("alerts", "alert_management"); a.HasKey(x => x.Id);
         a.Property(x => x.Id).HasMaxLength(70);
-        a.Property(x => x.BindingId).HasMaxLength(40).IsRequired(); a.Property(x => x.ReadingId).HasMaxLength(100).IsRequired();
+        // Null for alerts reported by hand: they have no triggering reading.
+        a.Property(x => x.BindingId).HasMaxLength(40); a.Property(x => x.ReadingId).HasMaxLength(100);
+        a.Property(x => x.Source).HasMaxLength(20).IsRequired().HasDefaultValue(AlertSource.Telemetry);
+        a.Property(x => x.ReportCategory).HasMaxLength(30); a.Property(x => x.Description).HasMaxLength(1000);
+        a.Property(x => x.ReportedByWorkerCode).HasMaxLength(60); a.Property(x => x.ReportedByWorkerName).HasMaxLength(120);
+        a.Property(x => x.OnDutyWorkerCode).HasMaxLength(60); a.Property(x => x.OnDutyWorkerName).HasMaxLength(120);
+        a.Property(x => x.AssignedTechnicianId).HasMaxLength(100); a.Property(x => x.AssignedTechnicianName).HasMaxLength(120);
+        a.Property(x => x.AssignedByUserId).HasMaxLength(100); a.Property(x => x.ResolvedByUserId).HasMaxLength(100);
+        a.Property(x => x.ResolutionNotes).HasMaxLength(1000);
         a.Property(x => x.EquipmentId).HasMaxLength(42).IsRequired(); a.Property(x => x.OwnerUserId).HasMaxLength(100).IsRequired();
         a.Property(x => x.AnomalyType).HasMaxLength(80).IsRequired(); a.Property(x => x.DetectionSeverity).HasMaxLength(30).IsRequired();
         a.Property(x => x.Severity).HasMaxLength(30).IsRequired(); a.Property(x => x.Status).HasMaxLength(30).IsRequired();
         a.Property(x => x.AcknowledgedByUserId).HasMaxLength(100);
         a.HasIndex(x => new { x.BindingId, x.ReadingId }).IsUnique();
         a.HasIndex(x => new { x.EquipmentId, x.CreatedAtUtc });
-        a.HasOne<EquipmentMeasurement>().WithMany().HasForeignKey(x => new { x.BindingId, x.ReadingId }).OnDelete(DeleteBehavior.Restrict);
+        a.HasOne<EquipmentMeasurement>().WithMany().HasForeignKey(x => new { x.BindingId, x.ReadingId }).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
         a.HasOne<ElectricalEquipment>().WithMany().HasForeignKey(x => x.EquipmentId).OnDelete(DeleteBehavior.Restrict);
-        a.Ignore(x => x.IsCritical); a.Ignore(x => x.IsCriticalLeakage);
+        a.Ignore(x => x.IsCritical); a.Ignore(x => x.IsCriticalLeakage); a.Ignore(x => x.IsActive);
         a.HasIndex(x => new { x.Status, x.Severity, x.CreatedAtUtc });
 
         var d = model.Entity<AlertDispatch>();

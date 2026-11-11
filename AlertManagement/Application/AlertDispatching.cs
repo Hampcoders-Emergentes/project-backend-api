@@ -21,10 +21,26 @@ public interface IAlertNotificationPort
     Task PublishAsync(string storeId, AlertResource alert, CancellationToken ct);
 }
 
-/// <summary>Human-readable description of an alert for external channels.</summary>
-public sealed record ExternalAlertMessage(string Subject, string Body);
+/// <summary>Machine-readable alert fields for structured channels (webhooks).</summary>
+public sealed record ExternalAlertDetails(string AlertId, string StoreId, string StoreName, string AreaName, string EquipmentId,
+    string EquipmentName, string AnomalyType, string Severity, bool IsCriticalLeakage, DateTime OccurredAtUtc);
 
-/// <summary>Outbound port: one external delivery channel (EMAIL, SMS).</summary>
+/// <summary>Human-readable description of an alert for external channels, plus its structured details.</summary>
+public sealed record ExternalAlertMessage(string Subject, string Body, ExternalAlertDetails? Details = null);
+
+/// <summary>
+///     Third-party destinations that receive every CRITICAL alert of every store, in addition to the store's own routes
+///     (e.g. a monitoring centre). Bound from "Notifications:CriticalEscalation".
+/// </summary>
+public sealed class CriticalEscalationSettings
+{
+    /// <summary>HTTPS endpoint receiving critical alerts as JSON (WEBHOOK channel).</summary>
+    public string? WebhookUrl { get; set; }
+    /// <summary>Phone number (E.164) receiving critical alerts by SMS.</summary>
+    public string? SmsNumber { get; set; }
+}
+
+/// <summary>Outbound port: one external delivery channel (EMAIL, SMS, WEBHOOK).</summary>
 public interface IExternalAlertChannel
 {
     string Channel { get; }
@@ -42,14 +58,27 @@ public interface IAlertDispatcher
 }
 
 public sealed class AlertDispatcher(IAlertRoutingPolicyPort routing, IAlertNotificationPort realtime,
-    IAlertDispatchRepository dispatches, ILogger<AlertDispatcher> logger) : IAlertDispatcher
+    IAlertDispatchRepository dispatches, Microsoft.Extensions.Options.IOptions<CriticalEscalationSettings> escalation,
+    ILogger<AlertDispatcher> logger) : IAlertDispatcher
 {
     public const string DashboardPush = "DASHBOARD_PUSH";
+    public const string Webhook = "WEBHOOK";
+    public const string Sms = "SMS";
 
     public async Task<int> PlanExternal(Alert alert, string storeId, CancellationToken ct)
     {
         var routes = (await routing.RoutesFor(storeId, alert.Severity, ct))
             .Where(r => r.Channel != DashboardPush && !string.IsNullOrEmpty(r.Destination)).ToList();
+        if (alert.IsCritical)
+        {
+            // Configured third-party escalation for critical alerts, on top of the store's routes.
+            foreach (var (channel, destination) in new[] { (Webhook, escalation.Value.WebhookUrl), (Sms, escalation.Value.SmsNumber) })
+            {
+                if (string.IsNullOrWhiteSpace(destination)) continue;
+                if (destination.Trim().Length > 254) { logger.LogWarning("[Alerts] Critical escalation {Channel} destination is too long; ignored", channel); continue; }
+                routes.Add(new AlertRoute(channel, destination.Trim()));
+            }
+        }
         if (routes.Count == 0) return 0;
         var queued = await dispatches.RoutesOf(alert.Id, ct);
         var now = DateTime.UtcNow;

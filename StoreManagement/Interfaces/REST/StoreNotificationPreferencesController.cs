@@ -19,7 +19,8 @@ public sealed record NotificationRouteInputResource(
 public sealed record UpdateNotificationPreferencesResource([Required, MaxLength(20)] IReadOnlyList<NotificationRouteInputResource> Routes);
 
 /// <summary>
-///     Alert routes of a store. Channels: EMAIL (address), SMS (E.164 phone), DASHBOARD_PUSH (in-app, no destination).
+///     Alert routes of a store. Channels: EMAIL (address), SMS (E.164 phone), DASHBOARD_PUSH (in-app, no destination),
+///     WEBHOOK (public https URL receiving the alert as JSON).
 ///     Urgency levels: CRITICAL, NON_CRITICAL. PUT replaces the whole set; an empty set restores the default (in-app only).
 /// </summary>
 [ApiController, HumanAuthorize]

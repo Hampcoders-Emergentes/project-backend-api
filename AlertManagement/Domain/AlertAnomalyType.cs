@@ -16,6 +16,10 @@ public static class AlertAnomalyType
     public const string AbnormalFrequency = "ABNORMAL_FREQUENCY";
     public const string ConnectionLost = "CONNECTION_LOST";
     public const string UnusualConsumption = "UNUSUAL_CONSUMPTION";
+    /// <summary>High humidity or water detected near an electrical panel.</summary>
+    public const string MoistureHazard = "MOISTURE_HAZARD";
+    /// <summary>Anomaly reported by a person (noise, sparks, smell...), not by a sensor.</summary>
+    public const string ManualReport = "MANUAL_REPORT";
 
     /// <summary>Maps a detector anomaly name (or an already normalized code) to the alert code.</summary>
     public static string FromDetection(string detected) => detected switch
@@ -30,6 +34,7 @@ public static class AlertAnomalyType
         "AbnormalFrequency" or AbnormalFrequency => AbnormalFrequency,
         "ConnectionLost" or ConnectionLost => ConnectionLost,
         "UnusualConsumptionPattern" or UnusualConsumption => UnusualConsumption,
+        "MoistureHazard" or MoistureHazard => MoistureHazard,
         _ => throw new ArgumentException("Unknown anomaly type.")
     };
 }
