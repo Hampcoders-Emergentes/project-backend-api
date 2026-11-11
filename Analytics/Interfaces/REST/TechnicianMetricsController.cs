@@ -5,14 +5,14 @@ using Hampcoders.Electrolink.API.Analytics.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Analytics.Interfaces.REST;
 
 [ApiController]
 [Route("api/v1/[controller]")]
 [Produces(MediaTypeNames.Application.Json)]
-[SwaggerTag("Technician Metrics endpoints")]
+[ApiDocTag("Technician Metrics endpoints")]
 public class TechnicianMetricsController(
     ITechnicianMetricsQueryService queryService,
     ITechnicianMetricsCommandService commandService,
@@ -21,12 +21,12 @@ public class TechnicianMetricsController(
     : ControllerBase
 {
     [HttpGet("{technicianId}")]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Get performance dashboard for a technician",
         Description = "Returns the current period metrics for the given technician.",
         OperationId = "GetTechnicianPerformance")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Metrics found", typeof(TechnicianMetricsResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Metrics not found")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Metrics found", typeof(TechnicianMetricsResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Metrics not found")]
     public async Task<IActionResult> GetPerformanceDashboard(string technicianId)
     {
         var denied = await this.DenyUnlessTechnicianAsync(profiles, technicianId);
@@ -41,11 +41,11 @@ public class TechnicianMetricsController(
     }
 
     [HttpPost("{technicianId}/initialize-period")]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Initialize a new metrics period",
         Description = "Creates a new metrics tracking period for the given technician.",
         OperationId = "InitializeTechnicianPeriod")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Period initialized")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Period initialized")]
     public async Task<IActionResult> InitializePeriod(string technicianId)
     {
         var denied = await this.DenyUnlessTechnicianAsync(profiles, technicianId);
