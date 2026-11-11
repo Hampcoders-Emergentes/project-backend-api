@@ -1,6 +1,6 @@
 # Conciliador local de IDs de relay/history
 
-Auxiliar net9.0 sin paquetes externos ni referencia a la API. Lee un archivo JSON local explícito y escribe un informe a stdout. No consulta bases/URLs, no ejecuta el host habitual y no modifica inventario, configuración o permisos. **Supported no significa aprobado**; `grantsAccess` siempre es false.
+Auxiliar net11.0 sin paquetes externos ni referencia a la API. Lee un archivo JSON local explícito y escribe un informe a stdout. No consulta bases/URLs, no ejecuta el host habitual y no modifica inventario, configuración o permisos. **Supported no significa aprobado**; `grantsAccess` siempre es false.
 
 ## Ejecución desde la raíz del backend
 
