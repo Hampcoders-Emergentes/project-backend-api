@@ -1,4 +1,5 @@
 using Hampcoders.Electrolink.API.AlertManagement.Application;
+using Hampcoders.Electrolink.API.Processing.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.StoreManagement.Domain.Model;
 using Hampcoders.Electrolink.API.StoreManagement.Domain.Repositories;
@@ -8,7 +9,7 @@ using Microsoft.Extensions.Configuration;
 namespace Hampcoders.Electrolink.API.StoreManagement.Application;
 
 public sealed record DeviceBindingResource(string Id, string EquipmentId, string DeviceId, string SerialNumber,
-    string EdgeDeviceId, DateTime LinkedAtUtc, string ThresholdProvenance);
+    string EdgeDeviceId, DateTime LinkedAtUtc);
 public sealed record EquipmentMeasurementResource(string ReadingId, DateTime CapturedAtUtc, DateTime ReceivedAtUtc,
     string TimestampBasis, float Voltage, float Current, float PowerFactor, float Frequency, string Source,
     float ActivePowerKw, string? DetectedAnomalyType, string? DetectedSeverity);
@@ -38,9 +39,10 @@ public sealed class EquipmentTelemetryService(StoreHierarchyService hierarchy, I
         await hierarchy.GetEquipment(actor, storeId, areaId, equipmentId, ct);
         var link = await repository.ByEquipment(equipmentId, ct);
         var last = link == null ? null : (await repository.Recent(link.Id, ct)).FirstOrDefault();
+        var thresholds = link == null ? null : await repository.ThresholdsOf(equipmentId, ct);
         var proof = link == null ? null : await authority.Verify(link.OwnerUserId, link.DeviceId, link.EdgeDeviceId);
         var verified = proof != null && proof.SerialNumber == link!.SerialNumber && proof.PropertyId == link.LegacyPropertyId && proof.ProfileId == link.AuthorizedProfileId;
-        var state = last == null ? "UNKNOWN" : !verified ? "DEVICE_UNVERIFIED" : DateTime.UtcNow - last.CapturedAtUtc > TimeSpan.FromMinutes(link!.Thresholds.DisconnectionThresholdMin)
+        var state = last == null ? "UNKNOWN" : !verified ? "DEVICE_UNVERIFIED" : DateTime.UtcNow - last.CapturedAtUtc > TimeSpan.FromMinutes(thresholds!.DisconnectionThresholdMin)
             ? "STALE" : last.AnomalyType == null ? "NORMAL" : "ANOMALY";
         return new(equipmentId, state, link == null ? null : Resource(link), last == null ? null : new(last.ReadingId,
             last.CapturedAtUtc, last.ReceivedAtUtc, last.TimestampBasis, last.Voltage, last.Current, last.PowerFactor,
@@ -74,29 +76,33 @@ public sealed class EquipmentTelemetryService(StoreHierarchyService hierarchy, I
     {
         var link = await MachineLink(input.DeviceId, ct);
         if (link == null) return false;
+        var thresholds = await repository.ThresholdsOf(link.EquipmentId, ct);
         var reading = EquipmentMeasurement.Capture(link, input.ReadingId, input.Timestamp, input.Voltage, input.Current,
             input.PowerFactor, input.Frequency, input.Source, DateTime.UtcNow);
         var existing = await repository.FindReading(link.Id, input.ReadingId, ct);
         if (existing != null) { if (!existing.SamePayload(reading)) throw new EquipmentConflictException(); return true; }
-        if (DateTime.UtcNow - reading.CapturedAtUtc <= TimeSpan.FromMinutes(link.Thresholds.DisconnectionThresholdMin))
+        if (DateTime.UtcNow - reading.CapturedAtUtc <= TimeSpan.FromMinutes(thresholds.DisconnectionThresholdMin))
         {
             var window = (await repository.Recent(link.Id, ct)).Where(r => r.CapturedAtUtc <= reading.CapturedAtUtc)
                 .Take(119).Select(r => r.AsReading()).Append(reading.AsReading()).ToArray();
-            var detection = ElectricalAnomalyRules.Detect(reading.AsReading(), window, link.Thresholds);
+            var detection = ElectricalAnomalyRules.Detect(reading.AsReading(), window, thresholds);
             reading.RecordDetection(detection?.type.ToString(), detection?.severity.ToString());
             if (detection != null)
                 await alerts.Stage(new(link.Id, reading.ReadingId, link.EquipmentId, link.OwnerUserId,
                     reading.AnomalyType!, reading.Severity!, reading.CapturedAtUtc, reading.ReceivedAtUtc), ct);
         }
-        repository.Add(reading); await repository.Save(ct); return true;
+        repository.Add(reading); await repository.Save(ct);
+        // The measurement and its alert are committed; only now may subscribers be told about the alert.
+        await alerts.PublishCommitted(ct);
+        return true;
     }
     public async Task<DeviceThresholdResource?> TryThresholds(string edgeId, CancellationToken ct)
     {
         var link = await MachineLink(edgeId, ct); if (link == null) return null;
-        var t = link.Thresholds;
+        var t = await repository.ThresholdsOf(link.EquipmentId, ct);
         return new(edgeId, new(t.NormalLimitAmps, t.AlertLimitAmps, t.NominalVoltage, t.MaxConsumptionWatts,
             t.MaxCurrentAmps, t.MinPowerFactor, t.NominalFrequency, t.DisconnectionThresholdMin));
     }
     private static DeviceBindingResource Resource(EquipmentDeviceBinding b) => new(b.Id, b.EquipmentId, b.DeviceId,
-        b.SerialNumber, b.EdgeDeviceId, b.LinkedAtUtc, b.ThresholdProvenance);
+        b.SerialNumber, b.EdgeDeviceId, b.LinkedAtUtc);
 }

@@ -36,6 +36,18 @@ public sealed class AlertRepository(StoreManagementDbContext context) : IAlertRe
         if (toUtc.HasValue) query = query.Where(a => a.CreatedAtUtc < toUtc.Value);
         return query.OrderByDescending(a => a.CreatedAtUtc).ThenBy(a => a.Id).Skip(skip).Take(take).ToListAsync(ct);
     }
+    public async Task<Dictionary<string, (int Critical, int NonCritical)>> OpenCountsByEquipment(
+        Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects.UserId actor, string storeId, CancellationToken ct)
+    {
+        var rows = await Scoped(actor, storeId, null, null).Where(a => a.Status == "OPEN")
+            .GroupBy(a => new { a.EquipmentId, a.Severity })
+            .Select(g => new { g.Key.EquipmentId, g.Key.Severity, Count = g.Count() }).ToListAsync(ct);
+        return rows.GroupBy(r => r.EquipmentId).ToDictionary(g => g.Key,
+            g => (g.Where(r => r.Severity == "CRITICAL").Sum(r => r.Count), g.Where(r => r.Severity != "CRITICAL").Sum(r => r.Count)));
+    }
+    public Task<string?> StoreIdOfEquipment(string equipmentId, CancellationToken ct) =>
+        (from e in context.Equipment.AsNoTracking() join a in context.Areas.AsNoTracking() on e.AreaId equals a.Id
+         where e.Id == equipmentId select (string?)a.StoreId).SingleOrDefaultAsync(ct);
     public async Task Acknowledge(AlertScope scope, string id, DateTime now, CancellationToken ct)
     {
         now = new DateTime(now.Ticks - now.Ticks % TimeSpan.TicksPerMicrosecond, DateTimeKind.Utc);

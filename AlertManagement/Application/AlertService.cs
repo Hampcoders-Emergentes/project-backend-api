@@ -5,12 +5,38 @@ using Hampcoders.Electrolink.API.StoreManagement.Application;
 namespace Hampcoders.Electrolink.API.AlertManagement.Application;
 
 // Stages only; the ingestion unit of work commits this alert with its measurement.
-public sealed class AlertMaterializer(IAlertRepository repository)
+public sealed class AlertMaterializer(IAlertRepository repository, MediatR.IMediator mediator, ILogger<AlertMaterializer> logger)
 {
+    private readonly List<Alert> _staged = [];
+
     public async Task Stage(DetectedMeasurement detection, CancellationToken ct)
     {
         if (await repository.BySource(detection.BindingId, detection.ReadingId, ct) == null)
-            repository.Add(Alert.Open(detection));
+        {
+            var alert = Alert.Open(detection);
+            repository.Add(alert);
+            if (alert.Severity == "CRITICAL") _staged.Add(alert);
+        }
+    }
+
+    /// <summary>Call after the unit of work committed: announces staged CRITICAL alerts. Never throws.</summary>
+    public async Task PublishCommitted(CancellationToken ct)
+    {
+        var pending = _staged.ToArray();
+        _staged.Clear();
+        foreach (var alert in pending)
+        {
+            try
+            {
+                var storeId = await repository.StoreIdOfEquipment(alert.EquipmentId, ct);
+                if (storeId != null)
+                    await mediator.Publish(new CriticalAlertMaterializedEvent(storeId, AlertService.ToResource(alert)), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "[Alerts] Could not announce critical alert {AlertId}", alert.Id);
+            }
+        }
     }
 }
 public sealed record AlertResource(string Id, string BindingId, string ReadingId, string EquipmentId, string AnomalyType,
@@ -55,6 +81,7 @@ public sealed class AlertService(StoreHierarchyService hierarchy, IAlertReposito
         return await Get(scope, id, ct);
     }
     private Task<EquipmentResource> Access(AlertScope s, CancellationToken ct) => hierarchy.GetEquipment(s.Actor, s.StoreId, s.AreaId, s.EquipmentId, ct);
+    internal static AlertResource ToResource(Alert a) => Resource(a);
     private static AlertResource Resource(Alert a) => new(a.Id, a.BindingId, a.ReadingId, a.EquipmentId, a.AnomalyType,
         a.DetectionSeverity, a.Severity, a.CapturedAtUtc, a.CreatedAtUtc, a.Status, a.AcknowledgedByUserId, a.AcknowledgedAtUtc);
 }

@@ -43,6 +43,14 @@ public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbC
         equipment.Property(e => e.AreaId).HasMaxLength(37).IsRequired();
         equipment.Property(e => e.Name).HasMaxLength(120).IsRequired();
         equipment.HasOne<StoreArea>().WithMany().HasForeignKey(e => e.AreaId).OnDelete(DeleteBehavior.Restrict);
+        equipment.OwnsOne(e => e.Thresholds, t =>
+        {
+            t.Property(x => x.NominalVoltage); t.Property(x => x.MaxConsumptionWatts);
+            t.Property(x => x.MaxCurrentAmps); t.Property(x => x.MinPowerFactor);
+            t.Property(x => x.NominalFrequency); t.Property(x => x.DisconnectionThresholdMin);
+            t.Property(x => x.NormalLimitAmps); t.Property(x => x.AlertLimitAmps);
+        });
+        equipment.Navigation(e => e.Thresholds).IsRequired();
         var bindings = modelBuilder.Entity<EquipmentDeviceBinding>();
         bindings.ToTable("device_bindings");
         bindings.HasKey(b => b.Id);
@@ -54,19 +62,10 @@ public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbC
         bindings.Property(b => b.EdgeDeviceId).HasMaxLength(200).IsRequired();
         bindings.Property(b => b.LegacyPropertyId).HasMaxLength(100).IsRequired();
         bindings.Property(b => b.AuthorizedProfileId).HasMaxLength(100).IsRequired();
-        bindings.Property(b => b.ThresholdProvenance).HasMaxLength(100).IsRequired();
         bindings.HasIndex(b => b.EquipmentId).IsUnique();
         bindings.HasIndex(b => b.DeviceId).IsUnique();
         bindings.HasIndex(b => b.EdgeDeviceId).IsUnique();
         bindings.HasOne<ElectricalEquipment>().WithMany().HasForeignKey(b => b.EquipmentId).OnDelete(DeleteBehavior.Restrict);
-        bindings.OwnsOne(b => b.Thresholds, t =>
-        {
-            t.Property(x => x.NominalVoltage); t.Property(x => x.MaxConsumptionWatts);
-            t.Property(x => x.MaxCurrentAmps); t.Property(x => x.MinPowerFactor);
-            t.Property(x => x.NominalFrequency); t.Property(x => x.DisconnectionThresholdMin);
-            t.Property(x => x.NormalLimitAmps); t.Property(x => x.AlertLimitAmps);
-        });
-        bindings.Navigation(b => b.Thresholds).IsRequired();
         var measurements = modelBuilder.Entity<EquipmentMeasurement>();
         measurements.ToTable("measurements");
         measurements.HasKey(r => new { r.BindingId, r.ReadingId });

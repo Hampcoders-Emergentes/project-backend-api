@@ -15,5 +15,6 @@ public interface IStoreHierarchyRepository
     void Add(Store store);
     void Add(StoreArea area);
     void Add(ElectricalEquipment equipment);
+    void Update(ElectricalEquipment equipment);
     Task SaveAsync(CancellationToken ct);
 }

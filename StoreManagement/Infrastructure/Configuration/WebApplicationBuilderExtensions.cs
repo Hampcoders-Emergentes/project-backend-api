@@ -27,7 +27,14 @@ public static class WebApplicationBuilderExtensions
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<AlertMaterializer>();
         services.AddScoped<AlertService>();
-        // Provisioning is explicit and separate: no EnsureCreated or Migrate on startup.
+        services.AddScoped<EquipmentThresholdService>();
+        services.AddScoped<IStoreDashboardReadRepository, StoreDashboardReadRepository>();
+        services.AddScoped<IStoreAlertSummaryPort, Hampcoders.Electrolink.API.AlertManagement.Infrastructure.StoreAlertSummaryAdapter>();
+        services.AddScoped<StoreDashboardService>();
+        services.AddScoped<Hampcoders.Electrolink.API.StoreManagement.Interfaces.ACL.IStoreMeasurementFacade, Hampcoders.Electrolink.API.StoreManagement.Interfaces.ACL.StoreMeasurementFacade>();
+        services.AddSignalR();
+        services.AddScoped<IAlertNotificationPort, Hampcoders.Electrolink.API.AlertManagement.Infrastructure.Realtime.SignalRAlertNotificationAdapter>();
+        // Schema comes from this context's EF migrations (applied at startup unless Database:MigrateOnStartup=false).
         return services;
     }
 }

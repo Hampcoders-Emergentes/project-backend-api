@@ -10,5 +10,8 @@ public interface IAlertRepository
     Task<Alert?> Find(AlertScope scope, string id, CancellationToken ct);
     Task<List<Alert>> List(AlertScope scope, string? status, string? severity, int skip, int take, CancellationToken ct, DateTime? fromUtc = null, DateTime? toUtc = null);
     Task<List<Alert>> ListStore(StoreAlertScope scope, string? status, string? severity, int skip, int take, CancellationToken ct, DateTime? fromUtc = null, DateTime? toUtc = null);
+    Task<Dictionary<string, (int Critical, int NonCritical)>> OpenCountsByEquipment(UserId actor, string storeId, CancellationToken ct);
+    /// <summary>Store that contains the equipment (alert routing key), or null.</summary>
+    Task<string?> StoreIdOfEquipment(string equipmentId, CancellationToken ct);
     Task Acknowledge(AlertScope scope, string id, DateTime now, CancellationToken ct);
 }

@@ -15,16 +15,13 @@ public sealed class EquipmentDeviceBinding
     public string LegacyPropertyId { get; private set; } = null!;
     public string AuthorizedProfileId { get; private set; } = null!;
     public DateTime LinkedAtUtc { get; private set; }
-    public ThresholdConfig Thresholds { get; private set; } = null!;
-    public string ThresholdProvenance { get; private set; } = null!;
     private EquipmentDeviceBinding() { }
     public static EquipmentDeviceBinding Link(string equipmentId, UserId actor, string deviceId, string serial,
         string edgeId, string propertyId, string profileId) => new()
     {
         Id = "binding-" + Guid.NewGuid().ToString("N"), EquipmentId = HierarchyValue.Id(equipmentId, "equipment-"),
         OwnerUserId = actor, DeviceId = deviceId, SerialNumber = serial, EdgeDeviceId = edgeId,
-        LegacyPropertyId = propertyId, AuthorizedProfileId = profileId, LinkedAtUtc = DateTime.UtcNow,
-        Thresholds = ThresholdConfig.Default(), ThresholdProvenance = "Processing.ThresholdConfig.Default:v1"
+        LegacyPropertyId = propertyId, AuthorizedProfileId = profileId, LinkedAtUtc = DateTime.UtcNow
     };
 }
 

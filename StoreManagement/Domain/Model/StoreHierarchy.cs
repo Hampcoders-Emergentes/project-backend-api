@@ -1,4 +1,5 @@
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
+using Hampcoders.Electrolink.API.Processing.Domain.Model.ValueObjects;
 
 namespace Hampcoders.Electrolink.API.StoreManagement.Domain.Model;
 
@@ -38,13 +39,18 @@ public sealed class ElectricalEquipment
     public string Id { get; private set; } = null!;
     public string AreaId { get; private set; } = null!;
     public string Name { get; private set; } = null!;
+    /// <summary>Operating limits used by anomaly evaluation and disconnection detection for this equipment.</summary>
+    public ThresholdConfig Thresholds { get; private set; } = ThresholdConfig.Default();
     private ElectricalEquipment() { }
     public static ElectricalEquipment Register(string areaId, string name) => new()
     {
         Id = "equipment-" + Guid.NewGuid().ToString("N"),
         AreaId = HierarchyValue.Id(areaId, "area-"),
-        Name = HierarchyValue.Text(name, 120, nameof(name))
+        Name = HierarchyValue.Text(name, 120, nameof(name)),
+        Thresholds = ThresholdConfig.Default()
     };
+    public void UpdateThresholds(ThresholdConfig thresholds) =>
+        Thresholds = thresholds ?? throw new ArgumentNullException(nameof(thresholds));
 }
 
 internal static class HierarchyValue

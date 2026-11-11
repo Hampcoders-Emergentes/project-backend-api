@@ -39,5 +39,6 @@ public sealed class StoreHierarchyRepository(StoreManagementDbContext context) :
     public void Add(Store store) => context.Stores.Add(store);
     public void Add(StoreArea area) => context.Areas.Add(area);
     public void Add(ElectricalEquipment equipment) => context.Equipment.Add(equipment);
+    public void Update(ElectricalEquipment equipment) => context.Equipment.Update(equipment);
     public async Task SaveAsync(CancellationToken ct) => await context.SaveChangesAsync(ct);
 }
