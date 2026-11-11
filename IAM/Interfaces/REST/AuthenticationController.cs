@@ -8,7 +8,7 @@ using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.IAM.Interfaces.REST;
 
@@ -16,8 +16,8 @@ namespace Hampcoders.Electrolink.API.IAM.Interfaces.REST;
 [ApiController]
 [Route("api/v1/[controller]")]
 [Produces(MediaTypeNames.Application.Json)]
-[SwaggerTag("Available Authentication endpoints")]
-public class AuthenticationController(IUserCommandService userCommandService) : ControllerBase
+[ApiDocTag("Available Authentication endpoints")]
+public class AuthenticationController(IUserCommandService userCommandService, ILogger<AuthenticationController> logger) : ControllerBase
 {
     /**
      * <summary>
@@ -28,11 +28,11 @@ public class AuthenticationController(IUserCommandService userCommandService) : 
      */
     [HttpPost("sign-in")]
     [AllowAnonymous]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Sign in",
         Description = "Sign in a user",
         OperationId = "SignIn")] 
-    [SwaggerResponse(StatusCodes.Status200OK, "The user was authenticated", typeof(AuthenticatedUserResource))]
+    [ApiDocResponse(StatusCodes.Status200OK, "The user was authenticated", typeof(AuthenticatedUserResource))]
     public async Task<IActionResult> SignIn([FromBody] SignInResource signInResource)
     {
         try
@@ -41,7 +41,7 @@ public class AuthenticationController(IUserCommandService userCommandService) : 
             var authenticatedUser = await userCommandService.Handle(signInCommand);
             var resource =
                 AuthenticatedUserResourceFromEntityAssembler.ToResourceFromEntity(authenticatedUser.user,
-                    authenticatedUser.token);
+                    authenticatedUser.token, authenticatedUser.refreshToken);
             return Ok(resource);    
         }
         catch (InactiveAccountException ex)
@@ -68,19 +68,19 @@ public class AuthenticationController(IUserCommandService userCommandService) : 
      */
     [HttpPost("sign-up")]
     [AllowAnonymous]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Sign-up",
         Description = "Sign up a new user",
         OperationId = "SignUp")]
-    [SwaggerResponse(StatusCodes.Status201Created, "The user was created successfully", typeof(AuthenticatedUserResource))]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Invalid data or email already taken")]
+    [ApiDocResponse(StatusCodes.Status201Created, "The user was created successfully", typeof(AuthenticatedUserResource))]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Invalid data or email already taken")]
     public async Task<IActionResult> SignUp([FromBody] SignUpResource signUpResource)
     {
         try {
             var signUpCommand = SignUpCommandFromResourceAssembler.ToCommandFromResource(signUpResource);
             var authenticatedUser = await userCommandService.Handle(signUpCommand);
             var resource = AuthenticatedUserResourceFromEntityAssembler.ToResourceFromEntity(authenticatedUser.user,
-                authenticatedUser.token);
+                authenticatedUser.token, authenticatedUser.refreshToken);
             return CreatedAtAction(nameof(SignIn), resource);
         } catch (Exception ex)
         {
@@ -92,15 +92,40 @@ public class AuthenticationController(IUserCommandService userCommandService) : 
         }
     }
     
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    [ApiDocOperation(
+        Summary = "Refresh session",
+        Description = "Exchanges a valid refresh token for a new access token and a rotated refresh token.",
+        OperationId = "RefreshToken")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Session refreshed", typeof(AuthenticatedUserResource))]
+    [ApiDocResponse(StatusCodes.Status401Unauthorized, "Invalid, expired or reused refresh token")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshTokenResource resource)
+    {
+        try
+        {
+            var result = await userCommandService.Handle(new RefreshTokenCommand(resource.RefreshToken));
+            return Ok(AuthenticatedUserResourceFromEntityAssembler.ToResourceFromEntity(result.user, result.token, result.refreshToken));
+        }
+        catch (InactiveAccountException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
+        catch (InvalidRefreshTokenException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("refresh-claims")]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Refresh Claims",
         Description = "Generates a new JWT with updated profile claims. " +
                       "Call this after completing your profile.",
         OperationId = "RefreshClaims")]
-    [SwaggerResponse(StatusCodes.Status200OK, "New token generated", 
+    [ApiDocResponse(StatusCodes.Status200OK, "New token generated", 
         typeof(RefreshedTokenResource))]
-    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Invalid or expired token")]
+    [ApiDocResponse(StatusCodes.Status401Unauthorized, "Invalid or expired token")]
     public async Task<IActionResult> RefreshClaims()
     {
         try
@@ -128,34 +153,35 @@ public class AuthenticationController(IUserCommandService userCommandService) : 
 
     [HttpPost("forgot-password")]
     [AllowAnonymous]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Request password reset",
         Description = "Sends a password reset token to the user's email. Returns 200 even if email not found (security).",
         OperationId = "RequestPasswordReset")]
-    [SwaggerResponse(StatusCodes.Status200OK, "If the email exists, a reset token is generated.")]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Invalid data")]
+    [ApiDocResponse(StatusCodes.Status200OK, "If the email exists, a reset token is generated.")]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Invalid data")]
     public async Task<IActionResult> ForgotPassword([FromBody] RequestPasswordResetResource resource)
     {
         try
         {
             var command = RequestPasswordResetCommandFromResourceAssembler.ToCommandFromResource(resource);
             await userCommandService.Handle(command);
-            return Ok(new { message = "If the email exists, a reset link has been sent." });
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return BadRequest(new { message = ex.Message });
+            // Never leak whether the account exists or whether delivery failed.
+            logger.LogError(ex, "[IAM] forgot-password processing failed");
         }
+        return Ok(new { message = "If the email exists, a reset link has been sent." });
     }
 
     [HttpPost("reset-password")]
     [AllowAnonymous]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Reset password with token",
         Description = "Resets the password using a valid reset token.",
         OperationId = "ResetPassword")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Password reset successfully")]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Invalid token or password policy violation")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Password reset successfully")]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Invalid token or password policy violation")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordResource resource)
     {
         try

@@ -1,4 +1,4 @@
-using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
+﻿using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Commands;
 
 namespace Hampcoders.Electrolink.API.IAM.Domain.Services;
@@ -20,7 +20,7 @@ public interface IUserCommandService
         * <param name="command">The sign in command</param>
         * <returns>The authenticated user and the JWT token</returns>
         */
-    Task<(User user, string token)> Handle(SignInCommand command);
+    Task<(User user, string token, string refreshToken)> Handle(SignInCommand command);
 
     /**
         * <summary>
@@ -29,7 +29,7 @@ public interface IUserCommandService
         * <param name="command">The sign up command</param>
         * <returns>A confirmation message on successful creation.</returns>
         */
-    Task<(User user, string token)> Handle(SignUpCommand command);
+    Task<(User user, string token, string refreshToken)> Handle(SignUpCommand command);
 
     /**
      * <summary>
@@ -48,6 +48,7 @@ public interface IUserCommandService
      * <returns>The new JWT token with refreshed claims.</returns>
      */
     Task<string> Handle(RefreshClaimsCommand command);
+    Task<(User user, string token, string refreshToken)> Handle(RefreshTokenCommand command);
     Task Handle(SuspendUserAccountCommand command);
     Task Handle(ActivateUserAccountCommand command);
     Task Handle(RequestPasswordResetCommand command);

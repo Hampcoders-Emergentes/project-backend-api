@@ -3,6 +3,7 @@ using Hampcoders.Electrolink.API.IAM.Application.Internal.OutboundServices;
 using Hampcoders.Electrolink.API.IAM.Application.Internal.QueryServices;
 using Hampcoders.Electrolink.API.IAM.Domain.Repositories;
 using Hampcoders.Electrolink.API.IAM.Domain.Services;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Notifications;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Hashing.BCrypt.Services;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Persistence.EFC.Repositories;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Tokens.JWT.Configuration;
@@ -19,6 +20,8 @@ public static class WebApplicationBuilderExtensions
         builder.Services.Configure<TokenSettings>(builder.Configuration.GetSection("TokenSettings"));
         
         builder.Services.AddScoped<IUserRepository, UserRepository>();
+        builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        builder.Services.AddScoped<IPasswordResetNotificationPort, LoggingPasswordResetNotifier>();
         builder.Services.AddScoped<IUserCommandService, UserCommandService>();
         builder.Services.AddScoped<IUserQueryService, UserQueryService>();
         builder.Services.AddScoped<ITokenService, TokenService>();

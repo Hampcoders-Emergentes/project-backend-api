@@ -1,6 +1,7 @@
 ﻿using Hampcoders.Electrolink.API.IAM.Application.Internal.OutboundServices;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Commands;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.Entities;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.IAM.Domain.Repositories;
@@ -21,6 +22,7 @@ namespace Hampcoders.Electrolink.API.IAM.Application.Internal.CommandServices;
  */
 public class UserCommandService(
     IUserRepository userRepository,
+    IRefreshTokenRepository refreshTokenRepository,
     ITokenService tokenService,
     IHashingService hashingService,
     IUnitOfWork unitOfWork,
@@ -36,7 +38,7 @@ public class UserCommandService(
      * <param name="command">The sign in command</param>
      * <returns>The authenticated user and the JWT token</returns>
      */
-    public async Task<(User user, string token)> Handle(SignInCommand command)
+    public async Task<(User user, string token, string refreshToken)> Handle(SignInCommand command)
     {
         var user = await userRepository.FindByEmailAsync(command.Email) ?? throw new InvalidCredentialsException("Invalid username or password");
 
@@ -50,6 +52,8 @@ public class UserCommandService(
         var profileClaims = await externalProfilesService.GetProfileClaimsAsync(user.Id.Value);
 
         var token = tokenService.GenerateToken(user, profileClaims);
+        var refreshToken = await IssueRefreshTokenAsync(user.Id);
+        await unitOfWork.CompleteAsync();
 
         user.RecordSignIn();
 
@@ -62,7 +66,7 @@ public class UserCommandService(
         user.ClearDomainEvents();
 
         logger.LogInformation("[IAM BC] Usuario {Email} inició sesión exitosamente.", command.Email);
-        return (user, token);
+        return (user, token, refreshToken);
     }
 
     /**
@@ -72,7 +76,7 @@ public class UserCommandService(
      * <param name="command">The sign-up command</param>
      * <returns>A confirmation message on successful creation.</returns>
      */
-    public async Task<(User user, string token)> Handle(SignUpCommand command)
+    public async Task<(User user, string token, string refreshToken)> Handle(SignUpCommand command)
     {
         if (string.IsNullOrWhiteSpace(command.Email) || string.IsNullOrWhiteSpace(command.Password) || string.IsNullOrWhiteSpace(command.PasswordConfirmation))
             throw new ArgumentException("Username and passwords cannot be empty");
@@ -102,8 +106,55 @@ public class UserCommandService(
         
         var profileClaims = await externalProfilesService.GetProfileClaimsAsync(user.Id.Value);
         var token = tokenService.GenerateToken(user, profileClaims);
+        var refreshToken = await IssueRefreshTokenAsync(user.Id);
+        await unitOfWork.CompleteAsync();
 
-        return (user, token);
+        return (user, token, refreshToken);
+    }
+
+    /// <summary>
+    ///     Rotates a refresh token. Presenting an already-revoked token signals theft/replay,
+    ///     so every active session of that user is revoked.
+    /// </summary>
+    public async Task<(User user, string token, string refreshToken)> Handle(RefreshTokenCommand command)
+    {
+        if (string.IsNullOrWhiteSpace(command.RefreshToken)) throw new InvalidRefreshTokenException();
+
+        var now = DateTime.UtcNow;
+        var presentedHash = tokenService.HashRefreshToken(command.RefreshToken);
+        var stored = await refreshTokenRepository.FindByHashAsync(presentedHash) ?? throw new InvalidRefreshTokenException();
+
+        if (stored.IsRevoked)
+        {
+            foreach (var active in await refreshTokenRepository.ListActiveByUserAsync(stored.UserId, now))
+                active.Revoke(now);
+            await unitOfWork.CompleteAsync();
+            logger.LogWarning("[IAM] Revoked refresh token reuse detected for user {UserId}; all sessions revoked.", stored.UserId.Value);
+            throw new InvalidRefreshTokenException("Refresh token reuse detected");
+        }
+
+        if (stored.IsExpired(now)) throw new InvalidRefreshTokenException("Refresh token expired");
+
+        var user = await userRepository.FindByIdAsync(stored.UserId) ?? throw new InvalidRefreshTokenException();
+        if (user.Status != EUserStatus.Active) throw new InactiveAccountException();
+
+        var newRaw = tokenService.GenerateRefreshTokenValue();
+        var newHash = tokenService.HashRefreshToken(newRaw);
+        stored.Revoke(now, newHash);
+        await refreshTokenRepository.AddAsync(RefreshToken.Issue(user.Id, newHash, tokenService.RefreshTokenLifetime, now));
+
+        var profileClaims = await externalProfilesService.GetProfileClaimsAsync(user.Id.Value);
+        var accessToken = tokenService.GenerateToken(user, profileClaims);
+        await unitOfWork.CompleteAsync();
+        return (user, accessToken, newRaw);
+    }
+
+    private async Task<string> IssueRefreshTokenAsync(UserId userId)
+    {
+        var raw = tokenService.GenerateRefreshTokenValue();
+        await refreshTokenRepository.AddAsync(
+            RefreshToken.Issue(userId, tokenService.HashRefreshToken(raw), tokenService.RefreshTokenLifetime, DateTime.UtcNow));
+        return raw;
     }
 
     public async Task<bool> Handle(UpdatePasswordCommand command)
@@ -175,8 +226,13 @@ public class UserCommandService(
 
     public async Task Handle(RequestPasswordResetCommand command)
     {
-        var user = await userRepository.FindByEmailAsync(command.Email)
-            ?? throw new ArgumentException("User not found for the given email.");
+        // Anti-enumeration: an unknown email is indistinguishable from a known one for the caller.
+        var user = await userRepository.FindByEmailAsync(command.Email);
+        if (user is null)
+        {
+            logger.LogInformation("[IAM] Password reset requested for an unregistered email; ignoring.");
+            return;
+        }
 
         user.RequestPasswordReset();
         userRepository.Update(user);
@@ -200,6 +256,10 @@ public class UserCommandService(
         var newHash = hashingService.HashPassword(command.NewPassword);
         user.ResetPassword(command.ResetToken, newHash);
         userRepository.Update(user);
+        // A password reset ends every existing session.
+        var resetNow = DateTime.UtcNow;
+        foreach (var active in await refreshTokenRepository.ListActiveByUserAsync(user.Id, resetNow))
+            active.Revoke(resetNow);
         await unitOfWork.CompleteAsync();
 
         foreach (var domainEvent in user.DomainEvents)

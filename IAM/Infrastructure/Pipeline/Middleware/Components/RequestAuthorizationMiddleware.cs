@@ -39,6 +39,9 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
         }
 
         var token = context.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+        // Browsers cannot attach headers to WebSocket/SSE upgrades; SignalR sends the JWT as ?access_token=.
+        if (string.IsNullOrEmpty(token) && context.Request.Path.StartsWithSegments("/hubs"))
+            token = context.Request.Query["access_token"].FirstOrDefault();
 
         if (string.IsNullOrEmpty(token))
         {

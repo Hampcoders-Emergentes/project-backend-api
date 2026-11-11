@@ -30,4 +30,12 @@ public interface ITokenService
      * <returns>The user id if the token is valid, null otherwise</returns>
      */
     Task<string?> ValidateToken(string token);
+
+    /// <summary>Generates a new opaque, high-entropy refresh token value.</summary>
+    string GenerateRefreshTokenValue();
+
+    /// <summary>One-way hash used to persist and look up refresh tokens.</summary>
+    string HashRefreshToken(string refreshToken);
+
+    TimeSpan RefreshTokenLifetime { get; }
 }
