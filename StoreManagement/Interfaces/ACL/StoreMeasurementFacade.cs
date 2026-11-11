@@ -11,9 +11,18 @@ public sealed class StoreMeasurementFacade(StoreHierarchyService hierarchy, ISto
     {
         await hierarchy.GetStore(actor, storeId, ct);
         var names = (await equipment.EquipmentStatus(actor, storeId, ct)).ToDictionary(e => e.EquipmentId, e => e.Name);
-        var rows = await telemetry.PowerSamples(actor, storeId, fromUtc, toUtc, ct);
-        // Same formula as the Processing reading model: kW = V * A / 1000 * power factor.
-        return new(names, rows.Select(r => new EquipmentPowerSample(r.EquipmentId, r.CapturedAtUtc,
-            (double)r.Voltage * r.Current / 1000.0 * r.PowerFactor)).ToList());
+        return new(names, Map(await telemetry.PowerSamples(actor, storeId, fromUtc, toUtc, ct)));
     }
+
+    public async Task<StorePowerData> EquipmentPowerSamples(UserId actor, string storeId, string areaId, string equipmentId,
+        DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        var item = await hierarchy.GetEquipment(actor, storeId, areaId, equipmentId, ct);
+        var rows = await telemetry.PowerSamples(actor, storeId, fromUtc, toUtc, ct, equipmentId);
+        return new(new Dictionary<string, string> { [item.Id] = item.Name }, Map(rows));
+    }
+
+    // Same formula as the Processing reading model: kW = V * A / 1000 * power factor.
+    private static List<EquipmentPowerSample> Map(List<PowerSampleRow> rows) => rows.Select(r => new EquipmentPowerSample(r.EquipmentId,
+        r.CapturedAtUtc, (double)r.Voltage * r.Current / 1000.0 * r.PowerFactor)).ToList();
 }
