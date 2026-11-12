@@ -26,6 +26,7 @@ public static class WebApplicationBuilderExtensions
         builder.Services.Configure<DemoRequestSettings>(builder.Configuration.GetSection("Subscriptions:DemoRequests"));
         builder.Services.AddScoped<IContactRequestRepository, ContactRequestRepository>();
         builder.Services.AddScoped<ContactRequestCommandService>();
+        builder.Services.AddScoped<ContactRequestQueryService>();
         builder.Services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
