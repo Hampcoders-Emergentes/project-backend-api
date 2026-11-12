@@ -12,6 +12,8 @@ namespace Hampcoders.Electrolink.API.Analytics.Domain.Services;
 public static class EnergyIntegrator
 {
     public static readonly TimeSpan DefaultMaxGap = TimeSpan.FromMinutes(15);
+    /// <summary>Energy is integrated between consecutive samples, so a period needs at least two of them.</summary>
+    public const int MinimumSamples = 2;
 
     public static IReadOnlyList<ConsumptionBucket> Integrate(IReadOnlyList<PowerSample> orderedSamples, DateTime fromUtc,
         DateTime toUtc, Granularity granularity, TimeSpan? maxGap = null)

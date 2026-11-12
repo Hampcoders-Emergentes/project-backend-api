@@ -13,14 +13,24 @@ public sealed record GetOffHoursConsumptionQuery(UserId Actor, string StoreId, D
 public sealed record GetBudgetStatusQuery(UserId Actor, string StoreId, int? Year, int? Month);
 public sealed record GetMaintenancePredictionsQuery(UserId Actor, string StoreId, int LookbackDays);
 
-public sealed record PeriodConsumptionResource(DateTime FromUtc, DateTime ToUtc, double Days, double Kwh, decimal Cost, double AverageDailyKwh);
+/// <param name="SampleCount">Power samples captured inside the period (all equipment).</param>
+public sealed record PeriodConsumptionResource(DateTime FromUtc, DateTime ToUtc, double Days, double Kwh, decimal Cost, double AverageDailyKwh,
+    int SampleCount);
+/// <param name="DataQuality">INSUFFICIENT_DATA when this equipment has fewer than MinimumSamples samples in either period.</param>
+/// <param name="SampleCount">Samples of this equipment in its less-observed period.</param>
 public sealed record EquipmentComparisonResource(string EquipmentId, string EquipmentName, double Period1Kwh, double Period2Kwh,
-    decimal Period1Cost, decimal Period2Cost, double? KwhChangePercent, double? CostChangePercent);
+    decimal Period1Cost, decimal Period2Cost, double? KwhChangePercent, double? CostChangePercent, string DataQuality, int SampleCount,
+    int MinimumSamples);
 /// <param name="KwhChangePercent">(period2 - period1) / period1; null when period 1 consumed nothing.</param>
 /// <param name="AverageDailyKwhChangePercent">Same on the daily average, so periods of different length compare fairly.</param>
+/// <param name="DataQuality">INSUFFICIENT_DATA when either period has fewer than <paramref name="MinimumSamples"/> samples: a zero
+///     or a 100% change then reflects missing telemetry, not consumption.</param>
+/// <param name="SampleCount">Samples of the period with fewer samples.</param>
+/// <param name="MinimumSamples">Samples each period needs (energy is integrated between consecutive samples).</param>
 public sealed record ConsumptionComparisonResource(string StoreId, string Currency, PeriodConsumptionResource Period1,
     PeriodConsumptionResource Period2, double KwhDifference, decimal CostDifference, double? KwhChangePercent, double? CostChangePercent,
-    double? AverageDailyKwhChangePercent, IReadOnlyList<EquipmentComparisonResource> Equipment);
+    double? AverageDailyKwhChangePercent, IReadOnlyList<EquipmentComparisonResource> Equipment,
+    string DataQuality, int SampleCount, int MinimumSamples);
 
 public sealed record OffHoursEpisodeResource(string EquipmentId, string EquipmentName, DateTime StartUtc, DateTime EndUtc, double Kwh,
     decimal Cost, double PeakKw, double AverageKw, int SampleCount);
@@ -37,9 +47,23 @@ public sealed record BudgetStatusResource(string StoreId, int Year, int Month, s
 public sealed record RepairWindowResource(DateTime StartUtc, DateTime EndUtc, string Reason);
 public sealed record MaintenancePredictionResource(string EquipmentId, string EquipmentName, string Severity, int RunningSamples,
     double? BaselinePowerFactor, double? RecentPowerFactor, double? PowerFactorSlopePerDay, double? DaysToPowerFactorLimit,
-    double? BaselineFluctuationIndex, double? RecentFluctuationIndex, IReadOnlyList<WearFinding> Findings, RepairWindowResource? RecommendedWindow);
+    double? BaselineFluctuationIndex, double? RecentFluctuationIndex, IReadOnlyList<WearFinding> Findings, RepairWindowResource? RecommendedWindow,
+    string DataQuality, int SampleCount, int MinimumSamples);
+/// <param name="DataQuality">SUFFICIENT or INSUFFICIENT_DATA for one equipment.</param>
+/// <param name="SampleCount">Running samples (equipment switched on) in the window.</param>
+public sealed record EquipmentDataQualityResource(string EquipmentId, string EquipmentName, string DataQuality, int SampleCount,
+    int MinimumSamples);
+
+/// <param name="DataQuality">
+///     SUFFICIENT only when the store has equipment and every one of them reached <paramref name="MinimumSamples"/>;
+///     otherwise INSUFFICIENT_DATA, and an empty <paramref name="Predictions"/> list must not be read as "healthy".
+/// </param>
+/// <param name="SampleCount">Running samples of the least-observed equipment (0 when the store has no equipment).</param>
+/// <param name="MinimumSamples">Running samples each equipment needs before it is analysed.</param>
+/// <param name="EquipmentDataQuality">The same assessment per equipment.</param>
 public sealed record MaintenancePredictionsResource(string StoreId, DateTime FromUtc, DateTime ToUtc, DateTime GeneratedAtUtc,
-    int AnalysedEquipment, IReadOnlyList<string> InsufficientDataEquipmentIds, IReadOnlyList<MaintenancePredictionResource> Predictions);
+    int AnalysedEquipment, IReadOnlyList<string> InsufficientDataEquipmentIds, IReadOnlyList<MaintenancePredictionResource> Predictions,
+    string DataQuality, int SampleCount, int MinimumSamples, IReadOnlyList<EquipmentDataQualityResource> EquipmentDataQuality);
 
 /// <summary>Period comparison, off-hours consumption, budget tracking and predictive maintenance of a store.</summary>
 public sealed class EnergyInsightsQueryService(IStoreMeasurementPort measurements, IUtilityRateProvider rates, IEnergyPlanningRepository planning)
@@ -51,19 +75,23 @@ public sealed class EnergyInsightsQueryService(IStoreMeasurementPort measurement
         var tariff = await rates.ForStore(query.StoreId, ct);
         var p1 = await Consumption(query.Actor, query.StoreId, query.Period1FromUtc, query.Period1ToUtc, tariff, ct);
         var p2 = await Consumption(query.Actor, query.StoreId, query.Period2FromUtc, query.Period2ToUtc, tariff, ct);
-        var period1 = Period(query.Period1FromUtc, query.Period1ToUtc, p1.Values.Values);
-        var period2 = Period(query.Period2FromUtc, query.Period2ToUtc, p2.Values.Values);
+        var period1 = Period(query.Period1FromUtc, query.Period1ToUtc, p1.Values.Values, p1.SampleCount);
+        var period2 = Period(query.Period2FromUtc, query.Period2ToUtc, p2.Values.Values, p2.SampleCount);
+        var sampleCount = Math.Min(p1.SampleCount, p2.SampleCount);
         var names = p1.Names.Concat(p2.Names).GroupBy(kv => kv.Key).ToDictionary(g => g.Key, g => g.First().Value);
         var equipment = names.Select(kv =>
         {
             var a = p1.Values.GetValueOrDefault(kv.Key);
             var b = p2.Values.GetValueOrDefault(kv.Key);
+            var samples = Math.Min(p1.Counts.GetValueOrDefault(kv.Key), p2.Counts.GetValueOrDefault(kv.Key));
             return new EquipmentComparisonResource(kv.Key, kv.Value, Math.Round(a.Kwh, 6), Math.Round(b.Kwh, 6), EnergyCostCalculator.Round(a.Cost),
-                EnergyCostCalculator.Round(b.Cost), ChangeRate.Percent(a.Kwh, b.Kwh), ChangeRate.Percent((double)a.Cost, (double)b.Cost));
+                EnergyCostCalculator.Round(b.Cost), ChangeRate.Percent(a.Kwh, b.Kwh), ChangeRate.Percent((double)a.Cost, (double)b.Cost),
+                DataQuality.Evaluate(samples, EnergyIntegrator.MinimumSamples), samples, EnergyIntegrator.MinimumSamples);
         }).OrderByDescending(e => Math.Abs(e.Period2Kwh - e.Period1Kwh)).ThenBy(e => e.EquipmentName, StringComparer.Ordinal).ToList();
         return new(query.StoreId, tariff.Currency, period1, period2, Math.Round(period2.Kwh - period1.Kwh, 6), period2.Cost - period1.Cost,
             ChangeRate.Percent(period1.Kwh, period2.Kwh), ChangeRate.Percent((double)period1.Cost, (double)period2.Cost),
-            ChangeRate.Percent(period1.AverageDailyKwh, period2.AverageDailyKwh), equipment);
+            ChangeRate.Percent(period1.AverageDailyKwh, period2.AverageDailyKwh), equipment,
+            DataQuality.Evaluate(sampleCount, EnergyIntegrator.MinimumSamples), sampleCount, EnergyIntegrator.MinimumSamples);
     }
 
     public async Task<OffHoursConsumptionResource> Handle(GetOffHoursConsumptionQuery query, CancellationToken ct)
@@ -129,37 +157,54 @@ public sealed class EnergyInsightsQueryService(IStoreMeasurementPort measurement
         var bySample = data.Samples.GroupBy(s => s.EquipmentId).ToDictionary(g => g.Key, g => g.OrderBy(s => s.CapturedAtUtc).ToList());
         var insufficient = new List<string>();
         var predictions = new List<MaintenancePredictionResource>();
+        var quality = new List<EquipmentDataQualityResource>();
+        const int minimum = MaintenancePredictor.MinimumRunningSamples;
         foreach (var (equipmentId, limits) in data.Limits)
         {
-            var assessment = MaintenancePredictor.Assess(equipmentId, bySample.GetValueOrDefault(equipmentId) ?? [], limits, from, now);
+            var samples = bySample.GetValueOrDefault(equipmentId) ?? [];
+            var running = MaintenancePredictor.RunningSampleCount(samples, limits);
+            quality.Add(new(equipmentId, data.EquipmentNames.GetValueOrDefault(equipmentId, equipmentId),
+                DataQuality.Evaluate(running, minimum), running, minimum));
+            var assessment = MaintenancePredictor.Assess(equipmentId, samples, limits, from, now);
             if (assessment == null) { insufficient.Add(equipmentId); continue; }
             if (assessment.Findings.Count == 0) continue;
             predictions.Add(new(equipmentId, data.EquipmentNames.GetValueOrDefault(equipmentId, equipmentId), assessment.Severity,
                 assessment.RunningSamples, assessment.BaselinePowerFactor, assessment.RecentPowerFactor, assessment.PowerFactorSlopePerDay,
                 assessment.DaysToPowerFactorLimit, assessment.BaselineFluctuationIndex, assessment.RecentFluctuationIndex, assessment.Findings,
-                window == null ? null : new RepairWindowResource(window.Value.StartUtc, window.Value.EndUtc, window.Value.Reason)));
+                window == null ? null : new RepairWindowResource(window.Value.StartUtc, window.Value.EndUtc, window.Value.Reason),
+                DataQuality.Sufficient, running, minimum));
         }
+        var leastObserved = quality.Count == 0 ? 0 : quality.Min(q => q.SampleCount);
+        var storeQuality = quality.Count > 0 && insufficient.Count == 0 ? DataQuality.Sufficient : DataQuality.InsufficientData;
         return new(query.StoreId, from, now, now, data.Limits.Count - insufficient.Count, insufficient,
-            predictions.OrderByDescending(p => WearSeverity.Rank(p.Severity)).ThenBy(p => p.EquipmentName, StringComparer.Ordinal).ToList());
+            predictions.OrderByDescending(p => WearSeverity.Rank(p.Severity)).ThenBy(p => p.EquipmentName, StringComparer.Ordinal).ToList(),
+            storeQuality, leastObserved, minimum,
+            quality.OrderBy(q => q.EquipmentName, StringComparer.Ordinal).ToList());
     }
 
-    private async Task<(IReadOnlyDictionary<string, string> Names, Dictionary<string, (double Kwh, decimal Cost)> Values)> Consumption(
+    private async Task<(IReadOnlyDictionary<string, string> Names, Dictionary<string, (double Kwh, decimal Cost)> Values, int SampleCount,
+        Dictionary<string, int> Counts)> Consumption(
         UserId actor, string storeId, DateTime fromUtc, DateTime toUtc, UtilityRateSchedule tariff, CancellationToken ct)
     {
         var data = await measurements.Load(actor, storeId, fromUtc - EnergyIntegrator.DefaultMaxGap, toUtc, ct);
+        var inPeriod = data.Samples.Where(s => s.CapturedAtUtc >= fromUtc && s.CapturedAtUtc < toUtc).ToList();
+        var sampleCount = inPeriod.Count;
+        var counts = inPeriod.GroupBy(s => s.EquipmentId).ToDictionary(g => g.Key, g => g.Count());
         var values = data.Samples.GroupBy(s => s.EquipmentId).ToDictionary(g => g.Key, g =>
         {
             var priced = EnergyCostCalculator.Price(EnergyIntegrator.Integrate(g.OrderBy(s => s.CapturedAtUtc).ToList(), fromUtc, toUtc,
                 Granularity.Hourly), tariff);
             return (priced.Sum(b => b.Kwh), priced.Sum(b => b.Cost));
         });
-        return (data.EquipmentNames, values);
+        return (data.EquipmentNames, values, sampleCount, counts);
     }
 
-    private static PeriodConsumptionResource Period(DateTime from, DateTime to, IReadOnlyCollection<(double Kwh, decimal Cost)> values)
+    private static PeriodConsumptionResource Period(DateTime from, DateTime to, IReadOnlyCollection<(double Kwh, decimal Cost)> values,
+        int sampleCount)
     {
         var kwh = values.Sum(v => v.Kwh);
         var days = (to - from).TotalDays;
-        return new(from, to, Math.Round(days, 4), Math.Round(kwh, 6), EnergyCostCalculator.Round(values.Sum(v => v.Cost)), Math.Round(kwh / days, 6));
+        return new(from, to, Math.Round(days, 4), Math.Round(kwh, 6), EnergyCostCalculator.Round(values.Sum(v => v.Cost)), Math.Round(kwh / days, 6),
+            sampleCount);
     }
 }

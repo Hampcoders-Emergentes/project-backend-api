@@ -43,11 +43,20 @@ public static class MaintenancePredictor
     public const int MinimumRunningSamples = 30;
     private static readonly TimeSpan MaxPairGap = TimeSpan.FromMinutes(2);
 
+    /// <summary>Samples taken while the equipment was running: the only ones the wear analysis uses.</summary>
+    public static int RunningSampleCount(IReadOnlyList<ElectricalSample> ordered, EquipmentOperatingLimits limits) =>
+        Running(ordered, limits).Count();
+
+    private static IEnumerable<ElectricalSample> Running(IReadOnlyList<ElectricalSample> ordered, EquipmentOperatingLimits limits)
+    {
+        var runningFloor = Math.Max(0.2, limits.MaxCurrentAmps * 0.05);
+        return ordered.Where(s => s.Current > runningFloor && double.IsFinite(s.PowerFactor));
+    }
+
     public static WearAssessment? Assess(string equipmentId, IReadOnlyList<ElectricalSample> ordered, EquipmentOperatingLimits limits,
         DateTime fromUtc, DateTime toUtc)
     {
-        var runningFloor = Math.Max(0.2, limits.MaxCurrentAmps * 0.05);
-        var running = ordered.Where(s => s.Current > runningFloor && double.IsFinite(s.PowerFactor)).ToList();
+        var running = Running(ordered, limits).ToList();
         if (running.Count < MinimumRunningSamples) return null;
         var middle = fromUtc + (toUtc - fromUtc) / 2;
         var baseline = running.Where(s => s.CapturedAtUtc < middle).ToList();
