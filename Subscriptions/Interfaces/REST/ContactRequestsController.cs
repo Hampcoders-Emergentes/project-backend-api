@@ -36,7 +36,17 @@ public sealed class ContactRequestsController(ContactRequestCommandService servi
                 body.Message, HttpContext.Connection.RemoteIpAddress?.ToString()), HttpContext.RequestAborted);
             return AcceptedAtAction(nameof(GetStatus), new { requestId = receipt.RequestId }, receipt);
         }
-        catch (ContactRequestLimitException e) { return StatusCode(StatusCodes.Status429TooManyRequests, new { message = e.Message }); }
+        catch (ContactRequestLimitException e)
+        {
+            // Rolling 24-hour quota per email: a full day is the upper bound before a slot frees up.
+            Response.Headers.RetryAfter = "86400";
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                message = e.Message,
+                errorCode = Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions.ErrorCodes.RateLimited,
+                retryAfterSeconds = 86400
+            });
+        }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 

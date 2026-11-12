@@ -31,6 +31,7 @@ using Hampcoders.Electrolink.API.IAM.Infrastructure.Auditing;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.ErrorHandling;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Idempotency;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.RateLimiting;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Tokens.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,6 +52,10 @@ builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.C
 builder.Services.AddUnifiedErrorHandling();
 // Idempotency-Key support for creation endpoints marked [IdempotentEndpoint].
 builder.Services.AddIdempotentEndpoints();
+// Global /api throttling (per user, or per IP when anonymous) and the shared 429 response (Retry-After + RATE_LIMITED).
+builder.Services.AddApiRateLimiting(builder.Configuration);
+// 409 REPORT_IN_PROGRESS for a report requested again while the same one is still being generated.
+builder.Services.AddSingleton<Hampcoders.Electrolink.API.Shared.Infrastructure.Concurrency.ReportGenerationGuard>();
 
 NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
 
@@ -78,19 +83,27 @@ builder.Services.AddOpenApi("v1", options =>
     options.AddOperationTransformer<Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi.SwaggerAnnotationsOperationTransformer>();
 });
 
-// CORS: explicit frontend origins from configuration (Cors:AllowedOrigins), default Angular dev server.
+// CORS: explicit frontend origins from configuration, default Angular dev server.
+// Cors:AllowedOrigins (array, per appsettings.{Environment}.json) plus Cors:AdditionalOrigins (comma/semicolon separated,
+// convenient as the Cors__AdditionalOrigins environment variable of a deployment). No code change per environment.
 const string FrontendCorsPolicy = "FrontendPolicy";
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()?
-    .Where(o => !string.IsNullOrWhiteSpace(o)).Select(o => o.Trim().TrimEnd('/')).ToArray() ?? [];
+var allowedOrigins = (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+    .Concat((builder.Configuration["Cors:AdditionalOrigins"] ?? "").Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
+    .Where(o => !string.IsNullOrWhiteSpace(o)).Select(o => o.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 if (allowedOrigins.Length == 0) allowedOrigins = ["http://localhost:4200"];
 if (allowedOrigins.Contains("*"))
     throw new InvalidOperationException("Cors:AllowedOrigins must list explicit origins; '*' is not allowed with credentials.");
+var malformedOrigin = allowedOrigins.FirstOrDefault(o => !Uri.TryCreate(o, UriKind.Absolute, out var uri)
+    || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) || uri.AbsolutePath != "/");
+if (malformedOrigin != null)
+    throw new InvalidOperationException($"CORS origin '{malformedOrigin}' must be scheme://host[:port] with no path.");
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(FrontendCorsPolicy, policy =>
         policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()
             // Response headers the SPA must be able to read.
-            .WithExposedHeaders("Location", RefreshedTokenHeader.Name, IdempotencyHeaders.Replayed));
+            .WithExposedHeaders("Location", "Retry-After", RefreshedTokenHeader.Name, IdempotencyHeaders.Replayed));
 });
 
 // Shared
@@ -214,7 +227,7 @@ app.UseAuthentication();
 app.UseAuditLogging();
 app.UseRequestAuthorization();
 app.UseAuthorization();
-// Endpoint rate limits (public demo request form).
+// After authentication so the global limiter partitions by user; also runs the endpoint policies (public demo form).
 app.UseRateLimiter();
 app.MapControllers();
 // Real-time alerts/store events (CORS policy FrontendPolicy is applied globally by UseCors above).
