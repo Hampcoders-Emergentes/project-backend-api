@@ -1,25 +1,73 @@
-﻿**/.dockerignore
-**/.env
+﻿# ============================================================================
+# Contexto de build para la imagen de la API
+# ============================================================================
+# El Dockerfile hace `COPY *.csproj .` + `dotnet restore` y luego `COPY . .`.
+# Todo lo que se ignore aquí acelera ese segundo COPY y evita que el contexto
+# arrastre artefactos locales (bin/obj, IDE, tests, herramientas).
+#
+# OJO: NO ignorar nada que el proyecto compile o publique:
+#   - Program.cs y el resto de *.cs (incluido TestStripeProps.cs de la raíz)
+#   - Assets/           el nombre engaña: es un bounded context con código real
+#                       (Property, IoTDevice, Component, IIoTDeviceRepository...)
+#   - appsettings*.json (salvo appsettings.Development.json, abajo)
+#   - **/Prompts/*.txt  (csproj: None Update="**\Prompts\*.txt")
+#   - Profiles/.DS_Store (csproj: Content Include)
+#   - docker/           (mosquitto.conf, usado al construir la imagen MQTT)
+# ============================================================================
+
+# --- Metadatos del repo / Docker --------------------------------------------
+**/.dockerignore
+**/Dockerfile*
+**/docker-compose*
 **/.git
 **/.gitignore
-**/.project
-**/.settings
-**/.toolstarget
+**/.gitattributes
+**/.gitmessage
+**/.env
+**/.env.*
+# ...pero el ejemplo versionado sí puede servir dentro del contexto.
+!**/.env.example
+
+# --- Editores y herramientas de IDE ----------------------------------------
 **/.vs
 **/.vscode
 **/.idea
+**/.project
+**/.settings
+**/.toolstarget
 **/*.*proj.user
+**/*.suo
+**/*.user
+# Local-only dev settings (may hold dev keys): never part of the image.
+**/appsettings.Development.json
+
+# --- Artefactos de compilación (se regeneran dentro de la imagen) ----------
+**/bin
+**/obj
 **/*.dbmdl
 **/*.jfm
 **/azds.yaml
-**/bin
-**/charts
-**/docker-compose*
-**/Dockerfile*
-**/node_modules
-**/npm-debug.log
-**/obj
 **/secrets.dev.yaml
 **/values.dev.yaml
+
+# --- Tests, herramientas y análisis estático -------------------------------
+# Ya están excluidos del proyecto por DefaultItemExcludes (tests/**;tools/**).
+**/tests
+**/tools
+**/.sonarqube
+**/TestResults
+**/*.trx
+**/*.coverage
+**/coverage*
+**/*.sarif
+
+# --- Documentación y material no ejecutable --------------------------------
+# (docs/ solo tiene Markdown y ejemplos .json/.ts para el frontend)
+**/docs
+**/tactical-docs
+**/charts
+**/node_modules
+**/npm-debug.log
+**/*.http
 LICENSE
-README.md
+**/README.md
