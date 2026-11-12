@@ -10,6 +10,8 @@ using Hampcoders.Electrolink.API.Planning.Domain.Services;
 using Hampcoders.Electrolink.API.Planning.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Planning.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Idempotency;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 using Microsoft.AspNetCore.Mvc;
 using HumanAuthorize = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AuthorizeAttribute;
 
@@ -58,8 +60,10 @@ public class ServiceRequestController(
         return Ok(new RequestEligibilityResource(canCreate, planType, remaining, canPriority, reason));
     }
 
+    /// <summary>Starts a draft request. 201 with the full summary (it includes requestId) and Location /service-requests/{requestId}.</summary>
     [HttpPost]
-    [ProducesResponseType(typeof(object), StatusCodes.Status201Created)]
+    [IdempotentEndpoint]
+    [ProducesResponseType(typeof(ServiceRequestSummaryResource), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Initiate()
     {
@@ -68,8 +72,11 @@ public class ServiceRequestController(
         try
         {
             var requestId = await commandService.Handle(
-                new InitiateServiceRequestCommand(client!)) ?? throw new Exception("Failed to create service request");
-            return StatusCode(StatusCodes.Status201Created, new { requestId = requestId.Value });
+                new InitiateServiceRequestCommand(client!)) ?? throw new InvalidOperationException("Failed to create service request");
+            var created = await queryService.Handle(new GetServiceRequestSummaryQuery(requestId, client!))
+                ?? throw new InvalidOperationException("The created service request could not be read back.");
+            return CreatedAtAction(nameof(GetSummary), new { requestId = requestId.Value },
+                ServiceRequestSummaryResourceFromEntityAssembler.ToResource(created));
         }
         catch (RequestLimitReachedException ex)
         {
@@ -97,21 +104,21 @@ public class ServiceRequestController(
     }
 
     [HttpGet("{requestId}/available-services")]
-    [ProducesResponseType(typeof(IEnumerable<AvailableServiceResource>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<AvailableServiceResource>>> GetAvailableServices(
-        [FromRoute] string requestId)
+    [ProducesResponseType(typeof(PagedResponse<AvailableServiceResource>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResponse<AvailableServiceResource>>> GetAvailableServices(
+        [FromRoute] string requestId, [FromQuery] PageRequest paging)
     {
         var (_, request, denied) = await ResolveOwnRequestAsync(requestId);
         if (denied is not null) return denied;
         var results = await queryService.Handle(new GetAvailableServicesQuery(request!));
 
-        return Ok(results.Select(r => new AvailableServiceResource(
+        return Ok(PagedResponse.From(results.Select(r => new AvailableServiceResource(
             r.ServiceCategory,
             r.CategoryDisplayName,
             r.MinPrice,
             r.MaxPrice,
             r.EstimatedDurationMinutes,
-            r.TechniciansAvailable)));
+            r.TechniciansAvailable)), paging));
     }
 
     [HttpPost("{requestId}/recipe")]

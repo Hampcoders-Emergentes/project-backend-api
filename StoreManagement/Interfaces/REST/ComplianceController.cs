@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.StoreManagement.Application;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Shared.Application.Time;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Idempotency;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 using Microsoft.AspNetCore.Mvc;
 using HumanAuthorize = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AuthorizeAttribute;
 
@@ -64,6 +66,7 @@ public sealed class ComplianceController(ComplianceRecordsService records, Compl
 
     /// <summary>Saves a draft or submits the weekly inspection (a submitted checklist must answer every item).</summary>
     [HttpPost("compliance/checklists")]
+    [IdempotentEndpoint]
     public Task<ActionResult<WeeklySafetyChecklistResource>> SaveChecklist(string storeId, SaveChecklistResource body) =>
         Execute(actor =>
         {
@@ -83,6 +86,7 @@ public sealed class ComplianceController(ComplianceRecordsService records, Compl
 
     /// <summary>Registers the signed record of a maintenance performed by a certified technician.</summary>
     [HttpPost("equipment/{equipmentId}/certificates")]
+    [IdempotentEndpoint]
     [ProducesResponseType(typeof(MaintenanceCertificateResource), StatusCodes.Status201Created)]
     public Task<ActionResult<MaintenanceCertificateResource>> RegisterCertificate(string storeId, string equipmentId, RegisterCertificateResource body) =>
         Execute(actor => records.Handle(new RegisterCertificateCommand(actor.Id, storeId, equipmentId, body.TechnicianName, body.CertificationNumber,
@@ -90,8 +94,10 @@ public sealed class ComplianceController(ComplianceRecordsService records, Compl
             value => Created($"/api/v1/stores/{storeId}/equipment/{equipmentId}/certificates", value));
 
     [HttpGet("equipment/{equipmentId}/certificates")]
-    public Task<ActionResult<IReadOnlyList<MaintenanceCertificateResource>>> ListCertificates(string storeId, string equipmentId) =>
-        Execute(actor => records.Handle(new ListCertificatesQuery(actor.Id, storeId, equipmentId), HttpContext.RequestAborted));
+    public Task<ActionResult<PagedResponse<MaintenanceCertificateResource>>> ListCertificates(string storeId, string equipmentId,
+        [FromQuery] PageRequest paging) =>
+        Execute(async actor => PagedResponse.From(await records.Handle(new ListCertificatesQuery(actor.Id, storeId, equipmentId), HttpContext.RequestAborted),
+            paging));
 
     /// <summary>
     ///     Certificates expiring within <paramref name="withinDays"/> days (or already expired) and equipment with no
@@ -149,9 +155,9 @@ public sealed class ComplianceController(ComplianceRecordsService records, Compl
 
     /// <summary>Dossiers generated for the store, newest first.</summary>
     [HttpGet("compliance/reports")]
-    public Task<ActionResult<IReadOnlyList<OhsReportResource>>> ListReports(string storeId) =>
-        Execute(async actor => (IReadOnlyList<OhsReportResource>)(await assessment.Handle(new ListOhsReportsQuery(actor.Id, storeId), HttpContext.RequestAborted))
-            .Select(r => Resource(storeId, r)).ToList());
+    public Task<ActionResult<PagedResponse<OhsReportResource>>> ListReports(string storeId, [FromQuery] PageRequest paging) =>
+        Execute(async actor => PagedResponse.From((await assessment.Handle(new ListOhsReportsQuery(actor.Id, storeId), HttpContext.RequestAborted))
+            .Select(r => Resource(storeId, r)), paging));
 
     /// <summary>Streams a generated dossier with Content-Disposition: attachment.</summary>
     [HttpGet("compliance/reports/{reportId}/download")]

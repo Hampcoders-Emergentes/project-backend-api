@@ -9,6 +9,7 @@ using Hampcoders.Electrolink.API.Processing.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Processing.Interfaces.REST.Transform;
 using Microsoft.AspNetCore.Mvc;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 
 namespace Hampcoders.Electrolink.API.Processing.Interfaces.REST;
 
@@ -74,14 +75,15 @@ public class DeviceMonitoringController(
 
     [HttpGet("properties/{propertyId}/anomalies")]
     [ApiDocOperation(Summary = "Get active anomalies by property", OperationId = "GetActiveAnomalies")]
-    [ProducesResponseType(typeof(IEnumerable<AnomalyResource>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<AnomalyResource>>> GetActiveAnomalies(string propertyId, [FromServices] IDeviceAccessService access)
+    [ProducesResponseType(typeof(PagedResponse<AnomalyResource>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResponse<AnomalyResource>>> GetActiveAnomalies(string propertyId, [FromServices] IDeviceAccessService access,
+        [FromQuery] PageRequest paging)
     {
         if (ActorUserId is not { } actorUserId) return Unauthorized();
 
         var anomalies = await queryService.Handle(new GetActiveAnomaliesByPropertyQuery(propertyId));
         var visible = await access.FilterVisibleAnomaliesAsync(actorUserId, propertyId, anomalies);
-        return Ok(visible.Select(AnomalyResourceFromEntityAssembler.ToResourceFromEntity));
+        return Ok(PagedResponse.From(visible.Select(AnomalyResourceFromEntityAssembler.ToResourceFromEntity), paging));
     }
 
     [HttpGet("{deviceId}/relay/history")]

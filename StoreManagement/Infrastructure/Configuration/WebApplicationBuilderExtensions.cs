@@ -39,7 +39,9 @@ public static class WebApplicationBuilderExtensions
         services.AddScoped<StoreNotificationPreferenceService>();
         services.AddScoped<Hampcoders.Electrolink.API.StoreManagement.Interfaces.ACL.IStoreNotificationRoutesFacade, Hampcoders.Electrolink.API.StoreManagement.Interfaces.ACL.StoreNotificationRoutesFacade>();
         services.AddScoped<Hampcoders.Electrolink.API.StoreManagement.Interfaces.ACL.IStoreAccessFacade, Hampcoders.Electrolink.API.StoreManagement.Interfaces.ACL.StoreAccessFacade>();
-        services.AddSignalR();
+        // Hub payloads use the same enum policy as the REST API (member names, not numbers).
+        services.AddSignalR().AddJsonProtocol(options =>
+            options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
         // Alert routing: in-app realtime (SignalR) plus a persisted queue for external fallback channels.
         services.AddScoped<IAlertNotificationPort, Hampcoders.Electrolink.API.AlertManagement.Infrastructure.Realtime.SignalRAlertNotificationAdapter>();
         services.AddScoped<IAlertRoutingPolicyPort, StoreRoutingPolicyAdapter>();

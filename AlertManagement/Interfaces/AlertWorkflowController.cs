@@ -5,6 +5,7 @@ using Hampcoders.Electrolink.API.AlertManagement.Domain;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Auditing;
 using Hampcoders.Electrolink.API.StoreManagement.Application;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Idempotency;
 using Microsoft.AspNetCore.Mvc;
 using HumanAuthorize = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AuthorizeAttribute;
 namespace Hampcoders.Electrolink.API.AlertManagement.Interfaces;
@@ -66,6 +67,7 @@ public sealed class EquipmentAnomalyReportsController(AlertService alerts) : Con
     ///     OVERHEATING, FLICKERING_LIGHTS, SMOKE, OTHER.
     /// </summary>
     [HttpPost]
+    [IdempotentEndpoint]
     [ProducesResponseType(typeof(AlertResource), StatusCodes.Status201Created)]
     public async Task<ActionResult<AlertResource>> Report(string storeId, string areaId, string equipmentId, ReportEquipmentAnomalyResource body)
     {

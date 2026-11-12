@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.StoreManagement.Application;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 using Microsoft.AspNetCore.Mvc;
 using HumanAuthorize = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AuthorizeAttribute;
 namespace Hampcoders.Electrolink.API.StoreManagement.Interfaces.REST;
@@ -108,8 +109,10 @@ public sealed class ShiftOperationsController(ShiftOperationsService service) : 
 
     /// <summary>Shifts overlapping [from, to) (ISO timestamps with offset); defaults to the last 12 and next 24 hours.</summary>
     [HttpGet("assignments")]
-    public Task<ActionResult<IReadOnlyList<StaffShiftResource>>> List(string storeId, [FromQuery] string? from = null, [FromQuery] string? to = null) =>
-        Execute(actor => service.Handle(new ListStaffShiftsQuery(actor.Id, storeId, from, to), HttpContext.RequestAborted));
+    public Task<ActionResult<PagedResponse<StaffShiftResource>>> List(string storeId, [FromQuery] PageRequest paging,
+        [FromQuery] string? from = null, [FromQuery] string? to = null) =>
+        Execute(async actor => PagedResponse.From(await service.Handle(new ListStaffShiftsQuery(actor.Id, storeId, from, to), HttpContext.RequestAborted),
+            paging));
 
     [HttpDelete("assignments/{shiftId}")]
     public async Task<IActionResult> Remove(string storeId, string shiftId)
@@ -157,8 +160,12 @@ public sealed class PanelPauseController(PanelPauseService service) : KitchenCon
     public Task<ActionResult<PanelPauseResource>> Get(string storeId) =>
         Execute(actor => service.Handle(new GetPanelPauseQuery(actor.Id, storeId), HttpContext.RequestAborted));
 
-    /// <summary>Unlocks the touchscreen before the pause expires.</summary>
+    /// <summary>
+    ///     Unlocks the touchscreen before the pause expires. Deliberate exception to "DELETE → 204": answers 200 with the
+    ///     resulting pause state (isPaused=false) so the panel can render it without a second request.
+    /// </summary>
     [HttpDelete]
+    [ProducesResponseType(typeof(PanelPauseResource), StatusCodes.Status200OK)]
     public Task<ActionResult<PanelPauseResource>> End(string storeId) =>
         Execute(actor => service.Handle(new EndPanelPauseCommand(actor.Id, storeId), HttpContext.RequestAborted));
 }

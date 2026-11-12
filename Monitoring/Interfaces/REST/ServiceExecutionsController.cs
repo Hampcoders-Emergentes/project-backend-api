@@ -10,6 +10,7 @@ using Hampcoders.Electrolink.API.Monitoring.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Hampcoders.Electrolink.API.Monitoring.Interfaces.REST;
@@ -85,33 +86,33 @@ public class ServiceExecutionsController(
     }
 
     [HttpGet("technicians/{technicianId}/assigned")]
-    [ProducesResponseType(typeof(IEnumerable<ServiceExecutionResource>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<ServiceExecutionResource>>> GetAssignedByTechnician(string technicianId)
+    [ProducesResponseType(typeof(PagedResponse<ServiceExecutionResource>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResponse<ServiceExecutionResource>>> GetAssignedByTechnician(string technicianId, [FromQuery] PageRequest paging)
     {
         var (technician, denied) = await AuthorizeTechnicianRouteAsync(technicianId);
         if (denied is not null) return denied;
         var executions = await queryService.Handle(new GetAssignedServicesByTechnicianQuery(technician!));
-        return Ok(executions.Select(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity));
+        return Ok(PagedResponse.From(executions.Select(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity), paging));
     }
 
     [HttpGet("homeowners/{homeownerId}/history")]
-    [ProducesResponseType(typeof(IEnumerable<ServiceExecutionResource>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<ServiceExecutionResource>>> GetHistoryByHomeowner(string homeownerId)
+    [ProducesResponseType(typeof(PagedResponse<ServiceExecutionResource>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResponse<ServiceExecutionResource>>> GetHistoryByHomeowner(string homeownerId, [FromQuery] PageRequest paging)
     {
         var denied = await this.DenyUnlessClientAsync(profiles, homeownerId);
         if (denied is not null) return denied;
         var executions = await queryService.Handle(new GetServiceHistoryByClientQuery(ClientIdentity.FromOwnerId(homeownerId)));
-        return Ok(executions.Select(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity));
+        return Ok(PagedResponse.From(executions.Select(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity), paging));
     }
 
     [HttpGet("technicians/{technicianId}/history")]
-    [ProducesResponseType(typeof(IEnumerable<ServiceExecutionResource>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<ServiceExecutionResource>>> GetHistoryByTechnician(string technicianId)
+    [ProducesResponseType(typeof(PagedResponse<ServiceExecutionResource>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResponse<ServiceExecutionResource>>> GetHistoryByTechnician(string technicianId, [FromQuery] PageRequest paging)
     {
         var (technician, denied) = await AuthorizeTechnicianRouteAsync(technicianId);
         if (denied is not null) return denied;
         var executions = await queryService.Handle(new GetServiceHistoryByTechnicianQuery(technician!));
-        return Ok(executions.Select(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity));
+        return Ok(PagedResponse.From(executions.Select(ServiceExecutionResourceFromEntityAssembler.ToResourceFromEntity), paging));
     }
 
     [HttpGet("homeowners/{homeownerId}/active")]
