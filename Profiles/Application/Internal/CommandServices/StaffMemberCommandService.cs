@@ -17,7 +17,7 @@ public class StaffMemberCommandService(
     ILogger<StaffMemberCommandService> logger)
     : IStaffMemberCommandService
 {
-    public async Task Handle(CreateStaffMemberCommand command)
+    public async Task<StaffMember> Handle(CreateStaffMemberCommand command)
     {
         var userExists = await externalIamService.UserExistsAsync(command.UserId);
         if (!userExists)
@@ -39,6 +39,7 @@ public class StaffMemberCommandService(
 
         logger.LogInformation("[Profiles] Staff member created: {FirstName} {LastName} (User: {UserId})",
             command.FirstName, command.LastName, command.UserId);
+        return staffMember;
     }
 
     public async Task Handle(AssignStaffZoneCommand command)
