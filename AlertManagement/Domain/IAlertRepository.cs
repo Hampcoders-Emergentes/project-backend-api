@@ -29,5 +29,9 @@ public interface IAlertRepository
     Task<(Alert Alert, string StoreId)?> FindForUpdate(UserId actor, string id, CancellationToken ct);
     /// <summary>Alerts of the store created in [fromUtc, toUtc), oldest first (no ownership check: internal callers authorize first).</summary>
     Task<List<StoreAlertRecord>> History(string storeId, DateTime fromUtc, DateTime toUtc, CancellationToken ct, string? severity = null);
+    /// <summary>Last change sequence handed out for the store (0 when none).</summary>
+    Task<long> LatestSequence(string storeId, CancellationToken ct);
+    /// <summary>Alerts of the store whose latest change is in (afterSequence, upToSequence], oldest change first.</summary>
+    Task<List<Alert>> ChangesSince(StoreAlertScope scope, long afterSequence, long upToSequence, int take, CancellationToken ct);
     Task Save(CancellationToken ct);
 }

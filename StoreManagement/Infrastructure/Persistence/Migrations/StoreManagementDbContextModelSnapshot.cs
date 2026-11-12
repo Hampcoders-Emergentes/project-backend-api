@@ -120,6 +120,11 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<long>("Sequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
                     b.Property<string>("Severity")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -138,6 +143,8 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
                         .HasColumnType("character varying(30)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Sequence");
 
                     b.HasIndex("BindingId", "ReadingId")
                         .IsUnique();
@@ -204,6 +211,22 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
                         .IsUnique();
 
                     b.ToTable("alert_dispatches", "alert_management");
+                });
+
+            modelBuilder.Entity("Hampcoders.Electrolink.API.AlertManagement.Infrastructure.StoreAlertSequence", b =>
+                {
+                    b.Property<string>("StoreId")
+                        .HasMaxLength(38)
+                        .HasColumnType("character varying(38)")
+                        .HasColumnName("store_id");
+
+                    b.Property<long>("LastSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_sequence");
+
+                    b.HasKey("StoreId");
+
+                    b.ToTable("store_alert_sequences", "alert_management");
                 });
 
             modelBuilder.Entity("Hampcoders.Electrolink.API.Analytics.Domain.Model.Aggregates.EnergyReport", b =>
@@ -1092,6 +1115,15 @@ namespace Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.
                         .WithMany()
                         .HasForeignKey("AlertId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Hampcoders.Electrolink.API.AlertManagement.Infrastructure.StoreAlertSequence", b =>
+                {
+                    b.HasOne("Hampcoders.Electrolink.API.StoreManagement.Domain.Model.Store", null)
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

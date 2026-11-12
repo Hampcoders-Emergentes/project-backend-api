@@ -22,6 +22,30 @@ public sealed class StoreManagementDbContext(DbContextOptions<StoreManagementDbC
     public DbSet<EquipmentMeasurement> Measurements => Set<EquipmentMeasurement>();
     public DbSet<StoreNotificationPreference> NotificationPreferences => Set<StoreNotificationPreference>();
     public DbSet<AlertDispatch> AlertDispatches => Set<AlertDispatch>();
+    public DbSet<StoreAlertSequence> AlertSequences => Set<StoreAlertSequence>();
+
+    /// <summary>
+    ///     Every alert creation or state change gets its store's next change sequence in the same transaction
+    ///     (see <see cref="AlertSequencer"/>). Joins the caller's transaction when there is one.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        var alerts = AlertSequencer.PendingChanges(ChangeTracker);
+        if (alerts.Count == 0) return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        if (Database.CurrentTransaction != null)
+        {
+            await AlertSequencer.StampAsync(this, alerts, cancellationToken);
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+        await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+        await AlertSequencer.StampAsync(this, alerts, cancellationToken);
+        var written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return written;
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess) =>
+        SaveChangesAsync(acceptAllChangesOnSuccess).GetAwaiter().GetResult();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

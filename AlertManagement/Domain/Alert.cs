@@ -70,6 +70,12 @@ public sealed class Alert
     public string? ResolvedByUserId { get; private set; }
     public DateTime? ResolvedAtUtc { get; private set; }
     public string? ResolutionNotes { get; private set; }
+    /// <summary>
+    ///     Position of this alert's latest change in its store's change stream: strictly increasing per store and stamped
+    ///     every time the alert is created or changes state, so clients can ask for what changed after a sequence.
+    ///     0 for alerts last changed before sequencing existed.
+    /// </summary>
+    public long Sequence { get; private set; }
     private Alert() { }
     public bool IsCritical => Severity == "CRITICAL";
     public bool IsActive => AlertStatus.Active.Contains(Status);
@@ -112,6 +118,13 @@ public sealed class Alert
             Severity = "NON_CRITICAL", CapturedAtUtc = now, CreatedAtUtc = now, ReportCategory = category,
             Description = description.Trim(), ReportedByWorkerCode = reportedBy?.WorkerCode, ReportedByWorkerName = reportedBy?.WorkerName
         };
+    }
+
+    /// <summary>Stamps the store-wide change sequence allocated when this change is persisted.</summary>
+    public void AssignSequence(long sequence)
+    {
+        if (sequence <= 0) throw new ArgumentOutOfRangeException(nameof(sequence), "Alert sequences start at 1.");
+        Sequence = sequence;
     }
 
     /// <summary>Records who was working when the incident happened (shift roster), for accountability.</summary>

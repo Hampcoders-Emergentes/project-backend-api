@@ -62,10 +62,19 @@ public sealed record AlertResource(string Id, string? BindingId, string? Reading
     string? AcknowledgedByUserId, DateTime? AcknowledgedAtUtc, bool IsCriticalLeakage, string Source, string? ReportCategory,
     string? Description, WorkerResource? ReportedBy, WorkerResource? OnDutyWorker, string? AssignedTechnicianId,
     string? AssignedTechnicianName, string? AssignedByUserId, DateTime? AssignedAtUtc, string? ResolvedByUserId,
-    DateTime? ResolvedAtUtc, string? ResolutionNotes);
+    DateTime? ResolvedAtUtc, string? ResolutionNotes, long Sequence);
 
+/// <param name="LatestSequence">Store change sequence the list is consistent with: pass it as afterSequence to
+///     GET .../alerts/changes to receive only what changed afterwards.</param>
 public sealed record ActiveAlertsResource(string StoreId, DateTime GeneratedAtUtc, int OpenCritical, int OpenNonCritical,
-    bool HasCriticalLeakage, IReadOnlyList<AlertResource> Items);
+    bool HasCriticalLeakage, IReadOnlyList<AlertResource> Items, long LatestSequence);
+
+/// <summary>Alerts created or changed after a sequence: the delta a reconnecting realtime client needs.</summary>
+/// <param name="Items">Current state of every alert whose latest change is after the requested sequence, by sequence.</param>
+/// <param name="LatestSequence">Cursor for the next call (afterSequence). Lower than the requested afterSequence when the
+///     client's cursor is unknown to the server (e.g. after a data reset): reload the full lists then.</param>
+/// <param name="HasMore">True when the page was cut at the limit: call again with LatestSequence right away.</param>
+public sealed record AlertChangesResponse(IReadOnlyList<AlertResource> Items, long LatestSequence, bool HasMore);
 
 public sealed record AlertDispatchResultResource(string AlertId, string StoreId, string Severity, bool RealtimePublished,
     int ExternalDispatchesQueued);
@@ -82,6 +91,7 @@ public sealed class AlertService(StoreHierarchyService hierarchy, IAlertReposito
     IAlertDispatchRepository dispatches, IOnDutyWorkerPort roster, MediatR.IMediator mediator, ILogger<AlertService> logger)
 {
     public const int ActiveAlertsLimit = 100;
+    public const int MaxChangesPageSize = 200;
     private static readonly string[] Severities = ["CRITICAL", "NON_CRITICAL"];
 
     public async Task<HierarchyPage<AlertResource>> List(AlertScope scope, string? status, string? severity, int page, int pageSize, CancellationToken ct, string? from = null, string? to = null)
@@ -103,11 +113,29 @@ public sealed class AlertService(StoreHierarchyService hierarchy, IAlertReposito
     public async Task<ActiveAlertsResource> ListActive(StoreAlertScope scope, CancellationToken ct)
     {
         await StoreAccess(scope, ct);
+        // Read first: every change up to it is committed, so a delta from this cursor misses nothing.
+        var latest = await repository.LatestSequence(scope.StoreId, ct);
         var rows = await repository.ListOpen(scope, ActiveAlertsLimit, ct);
         var counts = await repository.OpenCountsByEquipment(scope.Actor, scope.StoreId, ct);
         var relevant = scope.EquipmentId == null ? counts.Values : counts.Where(kv => kv.Key == scope.EquipmentId).Select(kv => kv.Value);
         return new(scope.StoreId, DateTime.UtcNow, relevant.Sum(c => c.Critical), relevant.Sum(c => c.NonCritical),
-            rows.Any(a => a.IsCriticalLeakage), rows.Select(Resource).ToList());
+            rows.Any(a => a.IsCriticalLeakage), rows.Select(Resource).ToList(), latest);
+    }
+
+    /// <summary>
+    ///     Alerts of the store created or changed after <paramref name="afterSequence"/> (current state, one entry per alert),
+    ///     so a client that reconnects to the hub fetches only what it missed.
+    /// </summary>
+    public async Task<AlertChangesResponse> Changes(StoreAlertScope scope, long afterSequence, int limit, CancellationToken ct)
+    {
+        if (afterSequence < 0 || limit is < 1 or > MaxChangesPageSize)
+            throw new ArgumentException($"afterSequence must be 0 or greater and limit between 1 and {MaxChangesPageSize}.");
+        await StoreAccess(scope, ct);
+        var latest = await repository.LatestSequence(scope.StoreId, ct);
+        var rows = afterSequence >= latest ? [] : await repository.ChangesSince(scope, afterSequence, latest, limit + 1, ct);
+        var hasMore = rows.Count > limit;
+        var items = rows.Take(limit).Select(Resource).ToList();
+        return new(items, hasMore ? items[^1].Sequence : latest, hasMore);
     }
 
     /// <summary>
@@ -216,5 +244,5 @@ public sealed class AlertService(StoreHierarchyService hierarchy, IAlertReposito
         a.ReportedByWorkerCode == null ? null : new WorkerResource(a.ReportedByWorkerCode, a.ReportedByWorkerName ?? a.ReportedByWorkerCode),
         a.OnDutyWorkerCode == null ? null : new WorkerResource(a.OnDutyWorkerCode, a.OnDutyWorkerName ?? a.OnDutyWorkerCode),
         a.AssignedTechnicianId, a.AssignedTechnicianName, a.AssignedByUserId, a.AssignedAtUtc, a.ResolvedByUserId, a.ResolvedAtUtc,
-        a.ResolutionNotes);
+        a.ResolutionNotes, a.Sequence);
 }

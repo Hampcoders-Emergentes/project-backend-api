@@ -29,6 +29,15 @@ public static class AlertMapping
         a.HasOne<ElectricalEquipment>().WithMany().HasForeignKey(x => x.EquipmentId).OnDelete(DeleteBehavior.Restrict);
         a.Ignore(x => x.IsCritical); a.Ignore(x => x.IsCriticalLeakage); a.Ignore(x => x.IsActive);
         a.HasIndex(x => new { x.Status, x.Severity, x.CreatedAtUtc });
+        // Change stream position (GET .../alerts/changes?afterSequence=); 0 for rows last changed before sequencing.
+        a.Property(x => x.Sequence).HasDefaultValue(0L);
+        a.HasIndex(x => x.Sequence);
+
+        var sequences = model.Entity<StoreAlertSequence>();
+        sequences.ToTable(AlertSequencer.Table, AlertSequencer.Schema); sequences.HasKey(x => x.StoreId);
+        sequences.Property(x => x.StoreId).HasColumnName("store_id").HasMaxLength(38);
+        sequences.Property(x => x.LastSequence).HasColumnName("last_sequence");
+        sequences.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
 
         var d = model.Entity<AlertDispatch>();
         d.ToTable("alert_dispatches", "alert_management"); d.HasKey(x => x.Id);

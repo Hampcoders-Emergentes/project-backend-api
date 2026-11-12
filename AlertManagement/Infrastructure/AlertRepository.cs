@@ -66,10 +66,24 @@ public sealed class AlertRepository(StoreManagementDbContext context) : IAlertRe
     public async Task Acknowledge(AlertScope scope, string id, DateTime now, CancellationToken ct)
     {
         now = new DateTime(now.Ticks - now.Ticks % TimeSpan.TicksPerMicrosecond, DateTimeKind.Utc);
-        // Single conditional SQL statement: first acknowledgement wins, including concurrent requests.
-        await Scoped(scope).Where(a => a.Id == id && a.Status == AlertStatus.Open).ExecuteUpdateAsync(setters => setters
-            .SetProperty(a => a.Status, AlertStatus.Acknowledged).SetProperty(a => a.AcknowledgedByUserId, scope.Actor.Value)
-            .SetProperty(a => a.AcknowledgedAtUtc, (DateTime?)now), ct);
+        // The bulk update bypasses SaveChanges, so the change sequence is allocated here, in the same transaction.
+        var own = context.Database.CurrentTransaction == null ? await context.Database.BeginTransactionAsync(ct) : null;
+        try
+        {
+            var sequence = await AlertSequencer.Allocate(context.Database, scope.StoreId, 1, ct);
+            // Single conditional SQL statement: first acknowledgement wins, including concurrent requests.
+            var updated = await Scoped(scope).Where(a => a.Id == id && a.Status == AlertStatus.Open).ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.Status, AlertStatus.Acknowledged).SetProperty(a => a.AcknowledgedByUserId, scope.Actor.Value)
+                .SetProperty(a => a.AcknowledgedAtUtc, (DateTime?)now).SetProperty(a => a.Sequence, sequence), ct);
+            if (own == null) return;
+            // Nothing changed (already acknowledged): give the sequence back instead of leaving a gap.
+            if (updated > 0) await own.CommitAsync(ct);
+            else await own.RollbackAsync(ct);
+        }
+        finally
+        {
+            if (own != null) await own.DisposeAsync();
+        }
     }
     public async Task<(Alert Alert, string StoreId)?> FindForUpdate(UserId actor, string id, CancellationToken ct)
     {
@@ -89,5 +103,12 @@ public sealed class AlertRepository(StoreManagementDbContext context) : IAlertRe
              && (severity == null || alert.Severity == severity)
          orderby alert.CreatedAtUtc, alert.Id
          select new StoreAlertRecord(alert, area.Name, equipment.Name)).ToListAsync(ct);
+    public async Task<long> LatestSequence(string storeId, CancellationToken ct) =>
+        await context.AlertSequences.AsNoTracking().Where(s => s.StoreId == storeId).Select(s => (long?)s.LastSequence)
+            .SingleOrDefaultAsync(ct) ?? 0;
+    public Task<List<Alert>> ChangesSince(StoreAlertScope scope, long afterSequence, long upToSequence, int take, CancellationToken ct) =>
+        Scoped(scope.Actor, scope.StoreId, null, scope.EquipmentId)
+            .Where(a => a.Sequence > afterSequence && a.Sequence <= upToSequence)
+            .OrderBy(a => a.Sequence).Take(take).ToListAsync(ct);
     public Task Save(CancellationToken ct) => context.SaveChangesAsync(ct);
 }
