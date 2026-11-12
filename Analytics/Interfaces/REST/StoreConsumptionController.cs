@@ -1,3 +1,5 @@
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.Net.Mime;
 using Hampcoders.Electrolink.API.Analytics.Application.Internal.OutboundServices;
 using Hampcoders.Electrolink.API.Analytics.Application.Internal.QueryServices;
@@ -26,7 +28,7 @@ public sealed class StoreConsumptionController(StoreConsumptionQueryService serv
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try { return Ok(Map(await service.Handle(Query(actor, storeId, from, to, granularity), HttpContext.RequestAborted))); }
-        catch (StoreNotAccessibleException) { return NotFound(new { message = "Resource not found." }); }
+        catch (StoreNotAccessibleException) { return NotFound(ErrorBodies.Coded("Resource not found.", ErrorCodes.StoreNotFound)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 
@@ -44,7 +46,7 @@ public sealed class StoreConsumptionController(StoreConsumptionQueryService serv
                 HttpContext.RequestAborted);
             return File(file.Content, file.ContentType, file.FileName);
         }
-        catch (StoreNotAccessibleException) { return NotFound(new { message = "Resource not found." }); }
+        catch (StoreNotAccessibleException) { return NotFound(ErrorBodies.Coded("Resource not found.", ErrorCodes.StoreNotFound)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 

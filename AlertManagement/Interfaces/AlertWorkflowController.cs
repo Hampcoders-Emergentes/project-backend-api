@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.AlertManagement.Application;
@@ -49,7 +50,7 @@ public sealed class AlertWorkflowController(AlertService alerts) : ControllerBas
             AuditContext.SetStore(HttpContext, result.StoreId);
             return Ok(result.Alert);
         }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (AlertStateException e) { return Conflict(new { message = e.Message }); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
@@ -78,7 +79,7 @@ public sealed class EquipmentAnomalyReportsController(AlertService alerts) : Con
                 body.Description, body.ReportedByWorkerCode, body.ReportedByWorkerName), HttpContext.RequestAborted);
             return Created($"/api/v1/stores/{storeId}/areas/{areaId}/equipment/{equipmentId}/alerts/{alert.Id}", alert);
         }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 }

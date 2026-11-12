@@ -154,7 +154,7 @@ public class IoTDevicesController : ControllerBase
         catch (DeviceAssignmentConflictException) { return Conflict(new { message = "Device is not free stock." }); }
         catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
             when (ex.Entries.Any(e => e.Entity is Hampcoders.Electrolink.API.Assets.Domain.Model.Aggregates.IoTDevice device && device.Id.Value == id))
-        { return Conflict(new { message = "Device is not free stock." }); }
+        { return Conflict(new { message = "Device is not free stock.", errorCode = Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions.ErrorCodes.StaleState }); }
     }
 
     [HttpPut("{id}/install/{propertyId}"), HumanAuthorize]

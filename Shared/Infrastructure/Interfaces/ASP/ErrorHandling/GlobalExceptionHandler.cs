@@ -14,18 +14,20 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         // The client went away: nothing to write.
         if (exception is OperationCanceledException && httpContext.RequestAborted.IsCancellationRequested) return true;
 
-        var (status, detail) = exception switch
+        var (status, detail, errorCode) = exception switch
         {
-            BadHttpRequestException bad => (bad.StatusCode, bad.Message),
-            KeyNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
-            InvalidIdException e => (StatusCodes.Status400BadRequest, e.Message),
-            ArgumentException e => (StatusCodes.Status400BadRequest, e.Message),
+            BadHttpRequestException bad => (bad.StatusCode, bad.Message, (string?)null),
+            KeyNotFoundException e => (StatusCodes.Status404NotFound, e.Message, null),
+            InvalidIdException e => (StatusCodes.Status400BadRequest, e.Message, null),
+            ArgumentException e => (StatusCodes.Status400BadRequest, e.Message, null),
             // Missing or foreign identity claims (ClaimsPrincipalExtensions) and domain access checks.
-            UnauthorizedAccessException e => (StatusCodes.Status403Forbidden, e.Message),
+            UnauthorizedAccessException e => (StatusCodes.Status403Forbidden, e.Message, null),
             Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException =>
-                (StatusCodes.Status409Conflict, "The resource was modified by another request. Reload it and try again."),
-            _ => (StatusCodes.Status500InternalServerError, (string?)null)
+                (StatusCodes.Status409Conflict, "The resource was modified by another request. Reload it and try again.", ErrorCodes.StaleState),
+            _ => (StatusCodes.Status500InternalServerError, (string?)null, null)
         };
+        // A coded 4xx exception names its own code; 5xx keep the generic one.
+        if (status < 500 && exception is ICodedError coded) errorCode = coded.ErrorCode;
 
         if (status >= 500)
             logger.LogError(exception, "Unhandled exception on {Method} {Path}", httpContext.Request.Method, httpContext.Request.Path);
@@ -33,7 +35,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             logger.LogInformation("Mapped {ExceptionType} to {Status} on {Method} {Path}", exception.GetType().Name, status,
                 httpContext.Request.Method, httpContext.Request.Path);
 
-        await ApiProblemDetails.WriteAsync(httpContext, status, detail);
+        await ApiProblemDetails.WriteAsync(httpContext, status, detail, errorCode: errorCode);
         return true;
     }
 }

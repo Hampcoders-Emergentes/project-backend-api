@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
 ﻿using Hampcoders.Electrolink.API.IAM.Application.Internal.OutboundServices;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Commands;
@@ -82,7 +83,7 @@ public class UserCommandService(
             throw new ArgumentException("Username and passwords cannot be empty");
         
         if (command.Password != command.PasswordConfirmation)
-            throw new ArgumentException("Password and confirmation do not match.");
+            throw new PasswordRejectedException("passwordConfirmation", ErrorCodes.PasswordsDoNotMatch, "Password and confirmation do not match.");
         
         if (await userRepository.ExistsByEmail(command.Email))
             throw new EmailAlreadyInUseException(Email.From(command.Email));
@@ -93,7 +94,7 @@ public class UserCommandService(
             : AccessRole.User;
 
         if (role != AccessRole.User)
-            throw new InvalidOperationException("Public registration only allows User role.");
+            throw new FieldValidationException("role", ErrorCodes.RoleNotAllowed, "Public registration only allows User role.");
 
         var user = User.Create(Email.From(command.Email), hash, role);
         
@@ -252,9 +253,9 @@ public class UserCommandService(
         if (string.IsNullOrWhiteSpace(command.ResetToken) || command.ResetToken.Length > 200)
             throw new ArgumentException("Invalid or expired reset token.");
         if (string.IsNullOrEmpty(command.NewPassword) || command.NewPassword.Length < MinPasswordLength || command.NewPassword.Length > 128)
-            throw new ArgumentException($"Password must contain between {MinPasswordLength} and 128 characters.");
+            throw new PasswordRejectedException("newPassword", ErrorCodes.PasswordLength, $"Password must contain between {MinPasswordLength} and 128 characters.");
         if (command.NewPassword != command.NewPasswordConfirmation)
-            throw new ArgumentException("Passwords do not match.");
+            throw new PasswordRejectedException("newPasswordConfirmation", ErrorCodes.PasswordsDoNotMatch, "Passwords do not match.");
 
         var user = await userRepository.FindByPasswordResetTokenAsync(PasswordResetToken.HashOf(command.ResetToken))
             ?? throw new ArgumentException("Invalid or expired reset token.");

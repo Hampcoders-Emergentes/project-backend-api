@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
@@ -58,7 +59,7 @@ public abstract class KitchenControllerBase : ControllerBase
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try { var value = await action(actor); return created != null ? created(value) : Ok(value); }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (PanelPauseRejectedException e) { return Conflict(new { message = e.Message }); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
@@ -123,7 +124,7 @@ public sealed class ShiftOperationsController(ShiftOperationsService service) : 
             await service.Handle(new RemoveStaffShiftCommand(actor.Id, storeId, shiftId), HttpContext.RequestAborted);
             return NoContent();
         }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 

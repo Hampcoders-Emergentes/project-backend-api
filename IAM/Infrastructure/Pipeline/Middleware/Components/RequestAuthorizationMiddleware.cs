@@ -69,7 +69,8 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
         // M3.27: a valid token does not keep a Suspended/PendingVerification account usable.
         if (user.Status != EUserStatus.Active)
         {
-            await ApiProblemDetails.WriteAsync(context, StatusCodes.Status403Forbidden, "The account is not active.");
+            await ApiProblemDetails.WriteAsync(context, StatusCodes.Status403Forbidden, "The account is not active.",
+                errorCode: Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions.ErrorCodes.AccountNotActive);
             return;
         }
 

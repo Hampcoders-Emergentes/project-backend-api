@@ -4,6 +4,7 @@ using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attribut
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Transform;
 using Microsoft.AspNetCore.Mvc;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Idempotency;
 
@@ -36,6 +37,9 @@ public class StaffUsersController(IStaffUserCommandService staffUserCommandServi
             // The account is readable at GET /api/v1/users/{id} (Admin/SuperAdmin may read any account).
             return Created($"/api/v1/users/{userId}", responseResource);
         }
+        catch (Domain.Model.Exceptions.EmailAlreadyInUseException) { return BadRequest(ErrorBodies.EmailAlreadyRegistered()); }
+        catch (Domain.Model.Exceptions.InvalidEmailException) { return BadRequest(ErrorBodies.InvalidEmail()); }
+        catch (Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions.FieldValidationException ex) { return BadRequest(ErrorBodies.Field(ex)); }
         catch (Exception ex)
         {
             return BadRequest(new { message = ex.Message });

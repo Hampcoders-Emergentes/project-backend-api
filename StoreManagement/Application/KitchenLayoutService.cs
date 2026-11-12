@@ -28,7 +28,7 @@ public sealed class KitchenLayoutService(StoreHierarchyService hierarchy, IKitch
     public async Task<StoreLayoutResource> Handle(GetStoreLayoutQuery query, CancellationToken ct)
     {
         await hierarchy.GetStore(query.Actor, query.StoreId, ct);
-        var store = await repository.TrackedStore(query.Actor, query.StoreId, ct) ?? throw new HierarchyNotFoundException();
+        var store = await repository.TrackedStore(query.Actor, query.StoreId, ct) ?? throw HierarchyNotFoundException.Store();
         return await Resource(query.Actor, store, await repository.StoreEquipment(query.StoreId, ct), ct);
     }
 
@@ -44,7 +44,7 @@ public sealed class KitchenLayoutService(StoreHierarchyService hierarchy, IKitch
         if (touched.Distinct(StringComparer.Ordinal).Count() != touched.Count)
             throw new ArgumentException("Each equipment may appear only once across placements and removals.");
 
-        var store = await repository.TrackedStore(command.Actor, command.StoreId, ct) ?? throw new HierarchyNotFoundException();
+        var store = await repository.TrackedStore(command.Actor, command.StoreId, ct) ?? throw HierarchyNotFoundException.Store();
         if (command.CanvasWidth != null || command.CanvasHeight != null)
             store.ResizeFloorPlan(command.CanvasWidth ?? store.LayoutWidth, command.CanvasHeight ?? store.LayoutHeight);
         var equipment = await repository.StoreEquipment(command.StoreId, ct);

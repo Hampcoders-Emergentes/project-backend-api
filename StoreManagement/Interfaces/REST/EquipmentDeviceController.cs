@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
@@ -35,7 +36,7 @@ public sealed class EquipmentDeviceController(EquipmentTelemetryService telemetr
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try { var value = await action(actor.Id); return created != null ? created(value) : Ok(value); }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (EquipmentAccessException e) { return StatusCode(403, new { message = e.Message }); }
         catch (EquipmentConflictException e) { return Conflict(new { message = e.Message }); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }

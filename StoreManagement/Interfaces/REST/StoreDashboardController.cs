@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.StoreManagement.Application;
 using Microsoft.AspNetCore.Mvc;
@@ -14,7 +15,7 @@ public sealed class StoreDashboardController(StoreDashboardService service) : Co
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try { return Ok(await service.Handle(new GetStoreDashboardSummaryQuery(actor.Id, storeId), HttpContext.RequestAborted)); }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 }

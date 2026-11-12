@@ -1,3 +1,5 @@
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Hampcoders.Electrolink.API.IAM.Application.Internal.QueryServices;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Microsoft.AspNetCore.Mvc;
@@ -27,7 +29,7 @@ public sealed class StoreAuditLogsController(AuditLogQueryService service) : Con
             return Ok(await service.Handle(new GetStoreAuditLogsQuery(actor.Id, storeId, from, to, action, status, page, pageSize, operatorId, resource),
                 HttpContext.RequestAborted));
         }
-        catch (AuditStoreNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (AuditStoreNotFoundException) { return NotFound(ErrorBodies.Coded("Resource not found.", ErrorCodes.StoreNotFound)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 }

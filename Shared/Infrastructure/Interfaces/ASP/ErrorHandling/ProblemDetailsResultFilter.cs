@@ -11,7 +11,8 @@ namespace Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.ErrorH
 ///     the controller returned: <c>{ message }</c>, <c>{ message, error }</c>, plain strings, typed resources or empty status
 ///     results. Runs for results produced by authorization filters too (IAlwaysRunResultFilter).
 ///     Members of a non-standard error body that are not the human-readable message are kept as extensions, so a body such
-///     as the matching result (<c>assigned:false, failureReason</c>) loses no data.
+///     as the matching result (<c>assigned:false, failureReason</c>) loses no data. An <c>errorCode</c> member becomes the
+///     envelope's code and an <c>errors</c> map (<c>IDictionary&lt;string, string[]&gt;</c>) its field errors.
 /// </summary>
 public sealed class ProblemDetailsResultFilter : IAlwaysRunResultFilter
 {
@@ -44,7 +45,9 @@ public sealed class ProblemDetailsResultFilter : IAlwaysRunResultFilter
     private static ObjectResult ToProblemResult(HttpContext http, int status, object? value)
     {
         var (detail, extensions, errors) = Deconstruct(value);
-        var problem = ApiProblemDetails.Create(http, status, detail, errors: errors);
+        // A specific "errorCode" member of the controller body wins over the status default.
+        var errorCode = extensions.Remove(ApiProblemDetails.ErrorCodeMember, out var code) ? code as string : null;
+        var problem = ApiProblemDetails.Create(http, status, detail, errors: errors, errorCode: errorCode);
         foreach (var (key, extension) in extensions)
             problem.Extensions.TryAdd(key, extension);
 
@@ -92,6 +95,12 @@ public sealed class ProblemDetailsResultFilter : IAlwaysRunResultFilter
             }
         }
 
+        IDictionary<string, string[]>? errors = null;
+        if (members.Remove("errors", out var fieldErrors) && fieldErrors is IDictionary<string, string[]> typedErrors)
+            errors = typedErrors;
+        else if (fieldErrors != null)
+            members["errors"] = fieldErrors;
+
         foreach (var (key, member) in members)
         {
             // message/error/detail are folded into "detail"; failureReason stays unless it became the detail.
@@ -99,7 +108,7 @@ public sealed class ProblemDetailsResultFilter : IAlwaysRunResultFilter
             if (key is "type" or "title" or "status" or "instance" or "traceId") continue;
             extensions[key] = member;
         }
-        return (detail, extensions, null);
+        return (detail, extensions, errors);
     }
 
     private static Dictionary<string, string[]> ToErrors(Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary modelState) =>

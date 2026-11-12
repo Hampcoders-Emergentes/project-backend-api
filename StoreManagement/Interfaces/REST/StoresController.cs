@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
@@ -61,7 +62,7 @@ public sealed class StoresController(StoreHierarchyService service) : Controller
             var result = await action(user.Id);
             return created != null ? created(result) : Ok(result);
         }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
     }
 }

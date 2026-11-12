@@ -225,7 +225,7 @@ public class ServiceRequestController(
         catch (InstallationRequestConflictException ex) { return Conflict(new { message = ex.Message }); }
         catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
             when (ex.Entries.Any(e => e.Entity is Hampcoders.Electrolink.API.Planning.Domain.Model.Aggregates.ServiceRequest r && r.RequestId.Value == requestId))
-        { return Conflict(new { message = new InstallationRequestConflictException().Message }); }
+        { return Conflict(new { message = new InstallationRequestConflictException().Message, errorCode = Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions.ErrorCodes.StaleState }); }
     }
 
     [HttpGet("{requestId}")]

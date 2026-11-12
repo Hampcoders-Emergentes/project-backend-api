@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.AlertManagement.Application;
@@ -25,7 +26,7 @@ public sealed class AlertDispatchController(AlertService alerts) : ControllerBas
     public async Task<IActionResult> Dispatch(DispatchAlertResource body)
     {
         try { return Accepted(await alerts.Dispatch(body.AlertId, HttpContext.RequestAborted)); }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Alert not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Alert not found.", notFound.ErrorCode)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 }

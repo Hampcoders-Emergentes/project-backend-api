@@ -1,3 +1,5 @@
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.ComponentModel.DataAnnotations;
 using System.Net.Mime;
 using System.Text.Json.Serialization;
@@ -89,7 +91,7 @@ public sealed class StoreEnergyPlanningController(EnergyInsightsQueryService ins
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try { return Ok(await action(actor)); }
-        catch (StoreNotAccessibleException) { return NotFound(new { message = "Resource not found." }); }
+        catch (StoreNotAccessibleException) { return NotFound(ErrorBodies.Coded("Resource not found.", ErrorCodes.StoreNotFound)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 }

@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
@@ -36,7 +37,7 @@ public sealed class EquipmentThresholdsController(EquipmentThresholdService serv
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try { return Ok(await action(actor)); }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 }

@@ -5,6 +5,7 @@ using Hampcoders.Electrolink.API.IAM.Domain.Services;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes;
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Microsoft.AspNetCore.Mvc;
@@ -49,9 +50,9 @@ public class AuthenticationController(IUserCommandService userCommandService, IL
                     authenticatedUser.token, authenticatedUser.refreshToken);
             return Ok(resource);    
         }
-        catch (InactiveAccountException ex)
+        catch (InactiveAccountException)
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            return StatusCode(StatusCodes.Status403Forbidden, ErrorBodies.AccountNotActive());
         }
         catch (Exception ex)
         {
@@ -87,13 +88,17 @@ public class AuthenticationController(IUserCommandService userCommandService, IL
             var resource = AuthenticatedUserResourceFromEntityAssembler.ToResourceFromEntity(authenticatedUser.user,
                 authenticatedUser.token, authenticatedUser.refreshToken);
             return CreatedAtAction(nameof(SignIn), resource);
-        } catch (Exception ex)
+        }
+        // Stays 400 (not 409) for backward compatibility; clients branch on errorCode.
+        catch (EmailAlreadyInUseException) { return BadRequest(ErrorBodies.EmailAlreadyRegistered()); }
+        catch (InvalidEmailException) { return BadRequest(ErrorBodies.InvalidEmail()); }
+        catch (FieldValidationException ex) { return BadRequest(ErrorBodies.Field(ex)); }
+        catch (ArgumentException ex) { return BadRequest(ErrorBodies.Coded(ex.Message, ErrorCodes.ValidationFailed)); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return BadRequest(new
-            {
-                message = "An error occurred while creating the user.",
-                error = ex.Message
-            });
+            // Unknown failures keep the historical 400 but never echo the internal message.
+            logger.LogError(ex, "[IAM] sign-up failed");
+            return BadRequest(ErrorBodies.Coded("An error occurred while creating the user.", ErrorCodes.RequestFailed));
         }
     }
     
@@ -112,9 +117,9 @@ public class AuthenticationController(IUserCommandService userCommandService, IL
             var result = await userCommandService.Handle(new RefreshTokenCommand(resource.RefreshToken));
             return Ok(AuthenticatedUserResourceFromEntityAssembler.ToResourceFromEntity(result.user, result.token, result.refreshToken));
         }
-        catch (InactiveAccountException ex)
+        catch (InactiveAccountException)
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            return StatusCode(StatusCodes.Status403Forbidden, ErrorBodies.AccountNotActive());
         }
         catch (InvalidRefreshTokenException ex)
         {
@@ -142,9 +147,9 @@ public class AuthenticationController(IUserCommandService userCommandService, IL
             var resource = RefreshedTokenResourceFromTokenAssembler.ToResourceFromToken(newToken);
             return Ok(resource);
         }
-        catch (InactiveAccountException ex)
+        catch (InactiveAccountException)
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+            return StatusCode(StatusCodes.Status403Forbidden, ErrorBodies.AccountNotActive());
         }
         catch (Exception ex)
         {
@@ -194,6 +199,10 @@ public class AuthenticationController(IUserCommandService userCommandService, IL
             var command = ResetPasswordCommandFromResourceAssembler.ToCommandFromResource(resource);
             await userCommandService.Handle(command);
             return Ok(new { message = "Password reset successfully." });
+        }
+        catch (FieldValidationException ex)
+        {
+            return BadRequest(ErrorBodies.Field(ex));
         }
         catch (ArgumentException ex)
         {
