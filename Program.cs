@@ -1,21 +1,16 @@
-using System.Text;
-using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.Assets.Infrastructure.Interfaces.ASP.Configuration.Extensions;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Infrastructure.Interfaces.ASP.Configuration.Extensions;
-using Hampcoders.Electrolink.API.Shared.Application.Internal.EventPublisher;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.Persistence.EFC.Configuration;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.Persistence.EFC.Repositories;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Configuration;
 using Hampcoders.Electrolink.API.Shared.Domain.Repositories;
-using Hampcoders.Electrolink.API.Shared.Domain.Services;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.BackgroundServices;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Models;
+using Scalar.AspNetCore;
 using MediatR; 
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Extensions;
 using Hampcoders.Electrolink.API.Monitoring.Infrastructure.Interfaces.ASP.Configuration.Extensions;
 using Hampcoders.Electrolink.API.Planning.Infrastructure.Interfaces.ASP.Configuration.Extensions;
-using Hampcoders.Electrolink.API.Profiles.Application.Internal.CommandServices;
 using Hampcoders.Electrolink.API.Profiles.Infrastructure.Interfaces.ASP.Configuration.Extensions;
 using Hampcoders.Electrolink.API.Profiles.Infrastructure.Persistence.JSON;
 using Hampcoders.Electrolink.API.Analytics.Application.Internal.CommandServices;
@@ -25,13 +20,19 @@ using Hampcoders.Electrolink.API.Processing.Infrastructure.Interfaces.ASP.Config
 using Hampcoders.Electrolink.API.Subscriptions.Application.Internal.CommandServices;
 using Hampcoders.Electrolink.API.Subscriptions.Infrastructure.Interfaces.ASP.Configuration.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using Hampcoders.Electrolink.API.Shared.Infrastructure;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Configuration;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Email;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Auditing;
+using System.Text.Json.Serialization;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.ErrorHandling;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Idempotency;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.RateLimiting;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Tokens.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,8 +41,21 @@ builder.Services.AddControllers(options => options.Conventions.Add(new KebabCase
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new ESpecialtyJsonConverter());
+        // Every enum crosses the wire by its member name (requests still accept the numeric value).
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
+// Same enum policy for JSON written outside MVC (minimal endpoints, Results.Json).
+builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// One RFC 7807 error envelope for every status code (exceptions, MVC results, status code pages, IAM middleware, JWT).
+builder.Services.AddUnifiedErrorHandling();
+// Idempotency-Key support for creation endpoints marked [IdempotentEndpoint].
+builder.Services.AddIdempotentEndpoints();
+// Global /api throttling (per user, or per IP when anonymous) and the shared 429 response (Retry-After + RATE_LIMITED).
+builder.Services.AddApiRateLimiting(builder.Configuration);
+// 409 REPORT_IN_PROGRESS for a report requested again while the same one is still being generated.
+builder.Services.AddSingleton<Hampcoders.Electrolink.API.Shared.Infrastructure.Concurrency.ReportGenerationGuard>();
 
 NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
 
@@ -62,66 +76,35 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.AddStoreManagementContextService(connectionString);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
+// OpenAPI document (built in) rendered by Scalar at /scalar/v1; spec at /openapi/v1.json
+builder.Services.AddOpenApi("v1", options =>
 {
-
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title       = "Hampcoders.ElectrolinkPlatform.API",
-        Version     = "v1",
-        Description = "Hampcoders Electrolink Platform API",
-        Contact     = new OpenApiContact { Name = "Hampcoders", Email = "contact@Hampcoders.com" },
-        License     = new OpenApiLicense { Name = "Apache 2.0", Url = new Uri("https://www.apache.org/licenses/LICENSE-2.0") }
-    });
-
-    options.EnableAnnotations();
-
-    // JWT Bearer
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        In            = ParameterLocation.Header,
-        Description   = "Ingrese el token JWT",
-        Name          = "Authorization",
-        Type          = SecuritySchemeType.Http,
-        Scheme        = "bearer",
-        BearerFormat  = "JWT"
-    });
-
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id   = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
-
-    if (builder.Environment.IsDevelopment())
-    {
-        options.AddServer(new OpenApiServer
-        {
-            Url         = "http://localhost:5055",
-            Description = "Development Server"
-        });
-    }
+    options.AddDocumentTransformer<Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi.BearerSecurityDocumentTransformer>();
+    options.AddOperationTransformer<Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi.SwaggerAnnotationsOperationTransformer>();
 });
 
-
-// CORS
+// CORS: explicit frontend origins from configuration, default Angular dev server.
+// Cors:AllowedOrigins (array, per appsettings.{Environment}.json) plus Cors:AdditionalOrigins (comma/semicolon separated,
+// convenient as the Cors__AdditionalOrigins environment variable of a deployment). No code change per environment.
+const string FrontendCorsPolicy = "FrontendPolicy";
+var allowedOrigins = (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+    .Concat((builder.Configuration["Cors:AdditionalOrigins"] ?? "").Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
+    .Where(o => !string.IsNullOrWhiteSpace(o)).Select(o => o.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+if (allowedOrigins.Length == 0) allowedOrigins = ["http://localhost:4200"];
+if (allowedOrigins.Contains("*"))
+    throw new InvalidOperationException("Cors:AllowedOrigins must list explicit origins; '*' is not allowed with credentials.");
+var malformedOrigin = allowedOrigins.FirstOrDefault(o => !Uri.TryCreate(o, UriKind.Absolute, out var uri)
+    || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) || uri.AbsolutePath != "/");
+if (malformedOrigin != null)
+    throw new InvalidOperationException($"CORS origin '{malformedOrigin}' must be scheme://host[:port] with no path.");
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAllPolicy", policy =>
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+    options.AddPolicy(FrontendCorsPolicy, policy =>
+        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()
+            // Response headers the SPA must be able to read.
+            .WithExposedHeaders("Location", "Retry-After", RefreshedTokenHeader.Name, IdempotencyHeaders.Replayed));
 });
-
-
 
 // Shared
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -142,6 +125,7 @@ builder.AddSubscriptionServices();
 builder.AddAnalyticsContextServices();
 builder.AddProcessingContextServices();
 builder.Services.AddExternalProviders(builder.Configuration);
+builder.Services.AddEmailDelivery(builder.Configuration);
 
 builder.Services.AddScoped<IOrphanedFileRepository, OrphanedFileRepository>();
 builder.Services.AddHostedService<OutboxProcessorBackgroundService>();
@@ -157,20 +141,30 @@ builder.Services.AddAuthentication(options =>
     })
     .AddJwtBearer(options =>
     {
-        // Carga la clave secreta desde la configuración (asegúrate de que TokenSettings.Secret esté configurado)
-        var secret = builder.Configuration["TokenSettings:Secret"] ?? throw new InvalidOperationException("TokenSettings:Secret not configured.");
-        var key = Encoding.ASCII.GetBytes(secret);
+        var tokenSettings = builder.Configuration.GetSection("TokenSettings").Get<Hampcoders.Electrolink.API.IAM.Infrastructure.Tokens.JWT.Configuration.TokenSettings>()
+                            ?? new Hampcoders.Electrolink.API.IAM.Infrastructure.Tokens.JWT.Configuration.TokenSettings();
+        if (string.IsNullOrWhiteSpace(tokenSettings.Secret))
+            throw new InvalidOperationException("TokenSettings:Secret not configured.");
 
-        options.TokenValidationParameters = new TokenValidationParameters
+        // Same parameters as the IAM middleware: issuer, audience, lifetime and signature, zero clock skew.
+        options.TokenValidationParameters = tokenSettings.CreateValidationParameters();
+
+        // Browsers cannot set headers on WebSocket/SSE upgrades: SignalR sends the JWT as ?access_token=.
+        options.Events = new JwtBearerEvents
         {
-            ValidateIssuerSigningKey = true, // Valida la firma del token
-            IssuerSigningKey = new SymmetricSecurityKey(key), // Usa tu clave secreta
-            ValidateIssuer = false, // Puedes establecer esto en true si tienes un emisor de tokens específico
-            ValidateAudience = false, // Puedes establecer esto en true si tienes una audiencia de tokens específica
-            ValidateLifetime = true, // Valida la fecha de expiración del token
-            ClockSkew = TimeSpan.Zero // No permite desviación del reloj para la expiración
-        };
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken) && context.HttpContext.Request.Path.StartsWithSegments("/hubs/alerts"))
+                    context.Token = accessToken;
+                return Task.CompletedTask;
+            }
+        }.WithProblemDetailsResponses();
     });
+
+// Profile/role claims are re-read from current state on each request, so a token issued before a profile completion,
+// role change or tier change does not keep failing (stale-claims 401/403).
+builder.Services.AddCurrentClaimsRefresh();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -182,7 +176,7 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddMediatR(
     typeof(SubscriptionCommandService).Assembly,
-    typeof(ConsumptionDashboardCommandService).Assembly,
+    typeof(TechnicianMetricsCommandService).Assembly,
     typeof(DeviceReadingStreamCommandService).Assembly,
     typeof(Hampcoders.Electrolink.API.Profiles.Application.Internal.CommandServices.ProfileCommandService).Assembly);
 
@@ -206,19 +200,21 @@ foreach (var allowlistKey in new[] { "EdgeApi:EquipmentReadings:AllowedDeviceIds
         app.Logger.LogWarning("{AllowlistKey} has no device IDs: edge requests it guards will get 403. Use indexed entries ({AllowlistKey}:0).", allowlistKey, allowlistKey);
 }
 
-// DB Init
-using (var scope = app.Services.CreateScope())
+// DB schema. AppDbContext is created from its current model (EnsureCreated): it only acts on an empty database
+// and never updates an existing one. It must run first: once any table exists it skips everything.
+// StoreManagementDbContext then applies its versioned EF Core migrations.
+// Set Database:MigrateOnStartup=false to manage the schema as a separate deployment step instead.
+if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 {
-    var services = scope.ServiceProvider;
-    var context = services.GetRequiredService<AppDbContext>();
-    context.Database.EnsureCreated();
+    using var scope = app.Services.CreateScope();
+    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
+    scope.ServiceProvider.GetRequiredService<Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Persistence.StoreManagementDbContext>().Database.Migrate();
 }
 
 // Middleware
+app.UseUnifiedErrorHandling();
 app.UseForwardedHeaders();
-app.UseCors("AllowAllPolicy");
-app.UseSwagger();
-app.UseSwaggerUI();
+app.UseCors(FrontendCorsPolicy);
 
 if (app.Environment.IsDevelopment())
 {
@@ -227,9 +223,21 @@ if (app.Environment.IsDevelopment())
 
 //app.UseHttpsRedirection();
 app.UseAuthentication();
+// Before request authorization, so the 401/403 responses it produces are audited too.
+app.UseAuditLogging();
 app.UseRequestAuthorization();
 app.UseAuthorization();
+// After authentication so the global limiter partitions by user; also runs the endpoint policies (public demo form).
+app.UseRateLimiter();
 app.MapControllers();
+// Real-time alerts/store events (CORS policy FrontendPolicy is applied globally by UseCors above).
+app.MapHub<Hampcoders.Electrolink.API.AlertManagement.Infrastructure.Realtime.AlertsHub>("/hubs/alerts");
+// RequestAuthorizationMiddleware only honours the IAM attribute, so the docs endpoints are marked with it.
+var anonymousDocs = new Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AllowAnonymousAttribute();
+app.MapOpenApi().WithMetadata(anonymousDocs);
+app.MapScalarApiReference(options => options
+    .WithTitle("Electrolink API")
+    .AddPreferredSecuritySchemes("Bearer")).WithMetadata(anonymousDocs);
 // RequestAuthorizationMiddleware only honours the IAM attribute; the framework's .AllowAnonymous() still gets a 401.
 app.MapHealthChecks("/health")
     .WithMetadata(new Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AllowAnonymousAttribute());

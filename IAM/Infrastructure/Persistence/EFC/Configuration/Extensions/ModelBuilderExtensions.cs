@@ -1,4 +1,5 @@
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
+using Hampcoders.Electrolink.API.IAM.Domain.Model.Entities;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.EntityFrameworkCore;
@@ -52,5 +53,20 @@ public static class ModelBuilderExtensions
                 prt.Property(x => x.ExpiresAt)
                     .HasColumnName("password_reset_token_expires_at");
             });
+    
+        builder.Entity<RefreshToken>(rt =>
+        {
+            rt.ToTable("refresh_tokens");
+            rt.HasKey(x => x.Id);
+            rt.Property(x => x.Id).HasMaxLength(60);
+            rt.Property(x => x.UserId)
+                .HasConversion(id => id.Value, value => UserId.From(value))
+                .HasMaxLength(60)
+                .IsRequired();
+            rt.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
+            rt.Property(x => x.ReplacedByTokenHash).HasMaxLength(128);
+            rt.HasIndex(x => x.TokenHash).IsUnique();
+            rt.HasIndex(x => x.UserId);
+        });
     }
 }

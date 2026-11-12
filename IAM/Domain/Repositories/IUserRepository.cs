@@ -42,5 +42,9 @@ public interface IUserRepository : IBaseRepository<User, UserId>
      */
     Task<IEnumerable<User>> ListAsync(int page, int pageSize);
 
-    Task<User?> FindByPasswordResetTokenAsync(string resetToken);
+    /// <summary>Number of registered users (total of the paginated list).</summary>
+    Task<int> CountAsync();
+
+    /// <summary>User with a pending reset whose stored token hash equals <paramref name="resetTokenHash"/>.</summary>
+    Task<User?> FindByPasswordResetTokenAsync(string resetTokenHash);
 }

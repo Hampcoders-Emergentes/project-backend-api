@@ -4,7 +4,9 @@ using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attribut
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Transform;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Idempotency;
 
 namespace Hampcoders.Electrolink.API.IAM.Interfaces.REST;
 
@@ -12,18 +14,19 @@ namespace Hampcoders.Electrolink.API.IAM.Interfaces.REST;
 [ApiController]
 [Route("api/v1/staff-users")]
 [Produces(MediaTypeNames.Application.Json)]
-[SwaggerTag("Staff User Management (Admin only)")]
+[ApiDocTag("Staff User Management (Admin only)")]
 public class StaffUsersController(IStaffUserCommandService staffUserCommandService) : ControllerBase
 {
     [HttpPost]
     [RequireAccessRole(Domain.Model.ValueObjects.AccessRole.Admin, Domain.Model.ValueObjects.AccessRole.SuperAdmin)]
-    [SwaggerOperation(
+    [IdempotentEndpoint]
+    [ApiDocOperation(
         Summary = "Create a staff user",
         Description = "Creates a staff user (Maker, Admin, FieldManager). Only accessible by Admin/SuperAdmin.",
         OperationId = "CreateStaffUser")]
-    [SwaggerResponse(StatusCodes.Status201Created, "Staff user created", typeof(StaffUserResource))]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Invalid data")]
-    [SwaggerResponse(StatusCodes.Status403Forbidden, "Forbidden")]
+    [ApiDocResponse(StatusCodes.Status201Created, "Staff user created", typeof(StaffUserResource))]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Invalid data")]
+    [ApiDocResponse(StatusCodes.Status403Forbidden, "Forbidden")]
     public async Task<IActionResult> CreateStaffUser([FromBody] CreateStaffUserResource resource)
     {
         try
@@ -31,8 +34,12 @@ public class StaffUsersController(IStaffUserCommandService staffUserCommandServi
             var command = CreateStaffUserCommandFromResourceAssembler.ToCommandFromResource(resource);
             var userId = await staffUserCommandService.Handle(command);
             var responseResource = new StaffUserResource(userId, resource.Email, resource.AccessRole);
-            return CreatedAtAction(nameof(CreateStaffUser), responseResource);
+            // The account is readable at GET /api/v1/users/{id} (Admin/SuperAdmin may read any account).
+            return Created($"/api/v1/users/{userId}", responseResource);
         }
+        catch (Domain.Model.Exceptions.EmailAlreadyInUseException) { return BadRequest(ErrorBodies.EmailAlreadyRegistered()); }
+        catch (Domain.Model.Exceptions.InvalidEmailException) { return BadRequest(ErrorBodies.InvalidEmail()); }
+        catch (Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions.FieldValidationException ex) { return BadRequest(ErrorBodies.Field(ex)); }
         catch (Exception ex)
         {
             return BadRequest(new { message = ex.Message });

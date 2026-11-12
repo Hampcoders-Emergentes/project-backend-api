@@ -8,7 +8,8 @@ using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attribut
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Transform;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 
 namespace Hampcoders.Electrolink.API.IAM.Interfaces.REST;
 
@@ -16,21 +17,23 @@ namespace Hampcoders.Electrolink.API.IAM.Interfaces.REST;
 [ApiController]
 [Route("api/v1/[controller]")]
 [Produces(MediaTypeNames.Application.Json)]
-[SwaggerTag("Available User endpoints")]
+[ApiDocTag("Available User endpoints")]
 public class UsersController(IUserQueryService userQueryService, IUserCommandService userCommandService, ILogger<UsersController> logger) : ControllerBase
 {
     [HttpGet("{id}")]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Get a user by its id",
-        Description = "Get a user by its id",
+        Description = "The caller's own account, or any account when the caller is Admin or SuperAdmin.",
         OperationId = "GetUserById")]
-    [SwaggerResponse(StatusCodes.Status200OK, "The user was found", typeof(UserResource))]
-    [SwaggerResponse(StatusCodes.Status403Forbidden, "You are not authorized to view this user")]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "User not found")]
+    [ApiDocResponse(StatusCodes.Status200OK, "The user was found", typeof(UserResource))]
+    [ApiDocResponse(StatusCodes.Status403Forbidden, "You are not authorized to view this user")]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "User not found")]
     public async Task<IActionResult> GetUserById(string id)
     {
-        var authenticatedUser = HttpContext.Items["User"] as User;
-        if (authenticatedUser == null || authenticatedUser.Id.Value != id)
+        // The role comes from the account loaded by the IAM middleware (current state), not from the token snapshot.
+        if (HttpContext.Items["User"] is not User authenticatedUser) return Unauthorized();
+        var isAdmin = authenticatedUser.Role is AccessRole.Admin or AccessRole.SuperAdmin;
+        if (authenticatedUser.Id.Value != id && !isAdmin)
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
                 message = "You are not authorized to view this user."
@@ -45,28 +48,28 @@ public class UsersController(IUserQueryService userQueryService, IUserCommandSer
 
     [HttpGet]
     [RequireAccessRole(AccessRole.Admin, AccessRole.SuperAdmin)]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Get all users",
         Description = "Get all users with pagination",
         OperationId = "GetAllUsers")]
-    [SwaggerResponse(StatusCodes.Status200OK, "The users were found", typeof(IEnumerable<UserResource>))]
-    public async Task<IActionResult> GetAllUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    [ApiDocResponse(StatusCodes.Status200OK, "The users were found", typeof(PagedResponse<UserResource>))]
+    public async Task<IActionResult> GetAllUsers([FromQuery] PageRequest paging)
     {
-        var getAllUsersQuery = new GetAllUsersQuery(page, pageSize);
-        var users = await userQueryService.Handle(getAllUsersQuery);
-        var userResources = users.Select(UserResourceFromEntityAssembler.ToResourceFromEntity);
-        return Ok(userResources);
+        var users = await userQueryService.Handle(new GetAllUsersQuery(paging.Page, paging.PageSize));
+        var total = await userQueryService.Handle(new GetUsersCountQuery());
+        var userResources = users.Select(UserResourceFromEntityAssembler.ToResourceFromEntity).ToList();
+        return Ok(PagedResponse<UserResource>.Create(userResources, paging, total));
     }
 
     [HttpPut("{id}/password")]
-    [SwaggerOperation(
+    [ApiDocOperation(
         Summary = "Update a user's password",
         Description = "Allows an authenticated user to update their password. Requires current password verification.",
         OperationId = "UpdatePassword")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Password updated successfully")]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Invalid current password, new password, or user not found")]
-    [SwaggerResponse(StatusCodes.Status401Unauthorized, "Unauthorized")]
-    [SwaggerResponse(StatusCodes.Status403Forbidden, "Forbidden - User ID in token does not match route ID")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Password updated successfully")]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Invalid current password, new password, or user not found")]
+    [ApiDocResponse(StatusCodes.Status401Unauthorized, "Unauthorized")]
+    [ApiDocResponse(StatusCodes.Status403Forbidden, "Forbidden - User ID in token does not match route ID")]
     public async Task<IActionResult> UpdatePassword(string id, [FromBody] UpdatePasswordResource resource)
     {
         try

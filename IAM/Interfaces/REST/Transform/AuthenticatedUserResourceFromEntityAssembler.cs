@@ -6,8 +6,8 @@ namespace Hampcoders.Electrolink.API.IAM.Interfaces.REST.Transform;
 public static class AuthenticatedUserResourceFromEntityAssembler
 {
     public static AuthenticatedUserResource ToResourceFromEntity(
-        User user, string token)
+        User user, string token, string refreshToken)
     {
-        return new AuthenticatedUserResource(user.Id.Value, user.Email.Value, token);
+        return new AuthenticatedUserResource(user.Id.Value, user.Email.Value, token, refreshToken);
     }
 }

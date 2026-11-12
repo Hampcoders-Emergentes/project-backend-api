@@ -1,14 +1,23 @@
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.StoreManagement.Domain.Model;
 using Hampcoders.Electrolink.API.StoreManagement.Domain.Repositories;
 
 namespace Hampcoders.Electrolink.API.StoreManagement.Application;
 
-public sealed record StoreResource(string Id, string Name, string Address, string OwnerUserId);
+public sealed record StoreResource(string Id, string Name, string Address, string OwnerUserId, DateTime? LastEdgeSyncAtUtc);
 public sealed record AreaResource(string Id, string StoreId, string Name);
 public sealed record EquipmentResource(string Id, string AreaId, string Name);
 public sealed record HierarchyPage<T>(IReadOnlyList<T> Items, int Page, int PageSize, bool HasMore);
-public sealed class HierarchyNotFoundException() : Exception("Resource not found.");
+/// <summary>
+///     A store, area, equipment or store-owned record does not exist or is not visible to the actor (deliberate
+///     non-disclosure). <see cref="ErrorCode"/> is STORE_NOT_FOUND when the store itself could not be resolved.
+/// </summary>
+public sealed class HierarchyNotFoundException(string errorCode = ErrorCodes.ResourceNotFound) : Exception("Resource not found."), ICodedError
+{
+    public string ErrorCode { get; } = errorCode;
+    public static HierarchyNotFoundException Store() => new(ErrorCodes.StoreNotFound);
+}
 
 public sealed class StoreHierarchyService(IStoreHierarchyRepository repository)
 {
@@ -77,7 +86,7 @@ public sealed class StoreHierarchyService(IStoreHierarchyRepository repository)
     private async Task<Store> RequireStore(UserId actor, string id, CancellationToken ct)
     {
         HierarchyValue.Id(id, "store-");
-        return await repository.FindStoreAsync(actor, id, ct) ?? throw new HierarchyNotFoundException();
+        return await repository.FindStoreAsync(actor, id, ct) ?? throw HierarchyNotFoundException.Store();
     }
     private async Task<StoreArea> RequireArea(UserId actor, string storeId, string areaId, CancellationToken ct)
     {
@@ -93,7 +102,7 @@ public sealed class StoreHierarchyService(IStoreHierarchyRepository repository)
     }
     private static HierarchyPage<TResource> Page<TEntity, TResource>(List<TEntity> rows, int page, int size, Func<TEntity, TResource> map) =>
         new(rows.Take(size).Select(map).ToArray(), page, size, rows.Count > size);
-    private static StoreResource Resource(Store s) => new(s.Id, s.Name, s.Address, s.OwnerUserId.Value);
+    private static StoreResource Resource(Store s) => new(s.Id, s.Name, s.Address, s.OwnerUserId.Value, s.LastEdgeSyncAtUtc);
     private static AreaResource Resource(StoreArea a) => new(a.Id, a.StoreId, a.Name);
     private static EquipmentResource Resource(ElectricalEquipment e) => new(e.Id, e.AreaId, e.Name);
 }

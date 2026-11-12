@@ -24,6 +24,7 @@ public static class WebApplicationBuilderExtensions
         builder.Services.AddScoped<IDeviceReadingStreamCommandService, DeviceReadingStreamCommandService>();
         builder.Services.AddScoped<IAnomalyCommandService, AnomalyCommandService>();
         builder.Services.AddScoped<IRelayCommandService, RelayCommandService>();
+        builder.Services.AddScoped<OfflineReadingsSyncCommandService>();
 
         // Query Services
         builder.Services.AddScoped<IIoTMonitoringQueryService, IoTMonitoringQueryService>();
@@ -45,6 +46,8 @@ public static class WebApplicationBuilderExtensions
         builder.Services.AddSingleton<IMqttSubscriptionService, MqttDeviceSubscriberService>();
         builder.Services.AddHostedService(sp =>
             (MqttDeviceSubscriberService)sp.GetRequiredService<IMqttSubscriptionService>());
+
+        builder.Services.AddHostedService<Hampcoders.Electrolink.API.Processing.Infrastructure.BackgroundServices.RelayCommandTimeoutWorker>();
 
         // MQTT Health Check — monitoreo de conectividad IoT
         builder.Services.AddHealthChecks()

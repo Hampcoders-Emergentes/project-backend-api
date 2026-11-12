@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Processing.Application.Internal.CommandServices;
 using Hampcoders.Electrolink.API.Processing.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Processing.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Processing.Domain.Model.ValueObjects;
@@ -9,7 +10,7 @@ using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Domain.Repositories;
 using Microsoft.AspNetCore.Mvc;
 using Hampcoders.Electrolink.API.StoreManagement.Application;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Processing.Interfaces.REST;
 
@@ -25,7 +26,7 @@ public class EdgeIngestionController(
     ILogger<EdgeIngestionController>   logger) : ControllerBase
 {
     [HttpPost("readings")]
-    [SwaggerOperation(Summary = "Receive a sensor reading from the Edge API", OperationId = "IngestReading")]
+    [ApiDocOperation(Summary = "Receive a sensor reading from the Edge API", OperationId = "IngestReading")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> IngestReading([FromBody] IngestReadingResource resource, [FromServices] EquipmentTelemetryService equipmentTelemetry)
@@ -43,12 +44,36 @@ public class EdgeIngestionController(
             resource.Voltage, resource.Current, resource.PowerFactor,
             resource.Frequency, resource.Source);
 
-        bool accepted = await streamService.Handle(command);
-        return accepted ? NoContent() : Conflict(new { message = "Reading rejected." });
+        try
+        {
+            bool accepted = await streamService.Handle(command);
+            return accepted ? NoContent() : Conflict(new { message = "Reading rejected." });
+        }
+        catch (KeyNotFoundException e) { return NotFound(new { message = e.Message }); }
+    }
+
+    /// <summary>
+    ///     Replays readings the panel buffered while the store was offline. Idempotent per readingId: resending a batch
+    ///     returns DUPLICATE for readings already stored. Per-reading results are returned in request order.
+    /// </summary>
+    [HttpPost("sync-batch")]
+    [ApiDocOperation(Summary = "Synchronize readings buffered during a connection loss", OperationId = "SyncOfflineReadingsBatch")]
+    [ProducesResponseType(typeof(OfflineSyncResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SyncOfflineBatch([FromBody] SyncOfflineReadingsBatchResource resource,
+        [FromServices] OfflineReadingsSyncCommandService sync)
+    {
+        var command = new SyncOfflineReadingsBatchCommand(resource.PanelId, resource.Readings.Select(r => new OfflineReading(
+            r.DeviceId, r.ReadingId, r.Timestamp, r.Voltage, r.Current, r.PowerFactor, r.Frequency, r.Source, r.LeakageCurrentAmps,
+            r.RelativeHumidityPercent, r.PanelSurfaceMoistureDetected)).ToList());
+        try { return Ok(await sync.Handle(command, HttpContext.RequestAborted)); }
+        // A concurrent writer stored one of these readings first; retrying the same batch is safe.
+        catch (EquipmentConflictException e) { return Conflict(new { message = e.Message }); }
+        catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 
     [HttpPost("anomalies")]
-    [SwaggerOperation(Summary = "Report an edge-detected anomaly from firmware", OperationId = "ReportEdgeAnomaly")]
+    [ApiDocOperation(Summary = "Report an edge-detected anomaly from firmware", OperationId = "ReportEdgeAnomaly")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> ReportEdgeAnomaly([FromBody] ReportEdgeAnomalyResource resource)
     {
@@ -56,12 +81,16 @@ public class EdgeIngestionController(
             resource.DeviceId, resource.AnomalyType,
             resource.TriggerReadingId, resource.EdgeAlertPayloadJson);
 
-        await streamService.Handle(command);
-        return NoContent();
+        try
+        {
+            await streamService.Handle(command);
+            return NoContent();
+        }
+        catch (InvalidOperationException e) { return NotFound(new { message = e.Message }); }
     }
 
     [HttpPost("relay/acknowledge")]
-    [SwaggerOperation(Summary = "Acknowledge relay command execution from device", OperationId = "AcknowledgeRelay")]
+    [ApiDocOperation(Summary = "Acknowledge relay command execution from device", OperationId = "AcknowledgeRelay")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AcknowledgeRelay([FromBody] AcknowledgeRelayResource resource)
@@ -79,7 +108,7 @@ public class EdgeIngestionController(
     }
 
     [HttpGet("devices/{deviceId}/thresholds")]
-    [SwaggerOperation(Summary = "Get device thresholds for Edge sync", OperationId = "GetDeviceThresholds")]
+    [ApiDocOperation(Summary = "Get device thresholds for Edge sync", OperationId = "GetDeviceThresholds")]
     [ProducesResponseType(typeof(DeviceThresholdResource), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDeviceThresholds(string deviceId, [FromServices] EquipmentTelemetryService equipmentTelemetry)
@@ -92,19 +121,7 @@ public class EdgeIngestionController(
         catch (EquipmentAccessException e) { return StatusCode(403, new { message = e.Message }); }
 
         var stream = await streamRepository.FindByDeviceIdAsync(deviceId);
-
-        // Auto-create a demo stream if one doesn't exist (Expo / Wokwi scenario)
-        if (stream is null)
-        {
-            var propertyId = PropertyId.From("prop-demo");
-            var owner      = ClientIdentity.FromHomeowner("ho-demo-owner");
-            stream = DeviceReadingStream.Create(
-                Shared.Domain.Model.ValueObjects.DeviceId.From(deviceId),
-                propertyId, owner);
-            await streamRepository.AddAsync(stream);
-            await unitOfWork.CompleteAsync();
-            logger.LogInformation("[Edge] Auto-created demo stream for device {DeviceId}.", deviceId);
-        }
+        if (stream is null) return NotFound(new { message = "Device is not registered." });
 
         var t = stream.CustomThresholds;
         var result = new DeviceThresholdResource(

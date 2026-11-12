@@ -7,7 +7,8 @@ using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 
 namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 
@@ -16,7 +17,7 @@ namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 /// </summary>
 [ApiController]
 [Route("api/v1/technicians/{technicianId}/[controller]")]
-[SwaggerTag("Components Management")]
+[ApiDocTag("Components Management")]
 // M3.25: global catalogue; see ComponentCatalogAccess for the read/write policy.
 public class ComponentsController(
     IComponentCommandService componentCommandService,
@@ -24,9 +25,9 @@ public class ComponentsController(
     IProfilesContextFacade profiles) : ControllerBase
 {
     [HttpPost]
-    [SwaggerOperation(Summary = "Create Component", OperationId = "CreateComponent")]
-    [SwaggerResponse(StatusCodes.Status201Created, "Component created", typeof(ComponentResource))]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Component could not be created")]
+    [ApiDocOperation(Summary = "Create Component", OperationId = "CreateComponent")]
+    [ApiDocResponse(StatusCodes.Status201Created, "Component created", typeof(ComponentResource))]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Component could not be created")]
     public async Task<IActionResult> CreateComponent(
         [FromRoute] string technicianId,  
         [FromBody] CreateComponentResource resource)
@@ -38,15 +39,16 @@ public class ComponentsController(
             var component = await componentCommandService.Handle(command);
             if (component is null) return BadRequest();
 
-            return Ok(ComponentResourceFromEntityAssembler.ToResourceFromEntity(component));
+            var created = ComponentResourceFromEntityAssembler.ToResourceFromEntity(component);
+            return CreatedAtRoute(nameof(GetComponentById), new { technicianId, componentId = component.Id.Value }, created);
         }
         catch (DuplicateAssetException ex) { return Conflict(new { message = ex.Message }); }
     }
 
     [HttpGet("{componentId}", Name = nameof(GetComponentById))]
-    [SwaggerOperation(Summary = "Get Component by Id", OperationId = "GetComponentById")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Component found", typeof(ComponentResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Component not found")]
+    [ApiDocOperation(Summary = "Get Component by Id", OperationId = "GetComponentById")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Component found", typeof(ComponentResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Component not found")]
     public async Task<IActionResult> GetComponentById(
         [FromRoute] string technicianId,   
         [FromRoute] string componentId)
@@ -61,22 +63,21 @@ public class ComponentsController(
     }
 
     [HttpGet]
-    [SwaggerOperation(Summary = "Get All Components", OperationId = "GetAllComponents")]
-    [SwaggerResponse(StatusCodes.Status200OK, "List of components retrieved", typeof(IEnumerable<ComponentResource>))]
-    public async Task<IActionResult> GetAllComponents([FromRoute] string technicianId)  
+    [ApiDocOperation(Summary = "Get All Components", OperationId = "GetAllComponents")]
+    [ApiDocResponse(StatusCodes.Status200OK, "List of components retrieved", typeof(PagedResponse<ComponentResource>))]
+    public async Task<IActionResult> GetAllComponents([FromRoute] string technicianId, [FromQuery] PageRequest paging)
     {
         var denied = await ComponentCatalogAccess.AuthorizeReadAsync(this, profiles, technicianId);
         if (denied is not null) return denied;
         var query = new GetAllComponentsQuery();
         var components = await componentQueryService.Handle(query);
-        var resources = components.Select(ComponentResourceFromEntityAssembler.ToResourceFromEntity);
-        return Ok(resources);
+        return Ok(PagedResponse.From(components.Select(ComponentResourceFromEntityAssembler.ToResourceFromEntity), paging));
     }
 
     [HttpPut("{componentId}")]
-    [SwaggerOperation(Summary = "Update Component", OperationId = "UpdateComponent")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Component updated", typeof(ComponentResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Component not found")]
+    [ApiDocOperation(Summary = "Update Component", OperationId = "UpdateComponent")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Component updated", typeof(ComponentResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Component not found")]
     public async Task<IActionResult> UpdateComponent(
         [FromRoute] string technicianId,   
         [FromRoute] string componentId,
@@ -95,9 +96,9 @@ public class ComponentsController(
     }
 
     [HttpDelete("{componentId}")]
-    [SwaggerOperation(Summary = "Delete Component", OperationId = "DeleteComponent")]
-    [SwaggerResponse(StatusCodes.Status204NoContent, "Component deleted")]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Component not found")]
+    [ApiDocOperation(Summary = "Delete Component", OperationId = "DeleteComponent")]
+    [ApiDocResponse(StatusCodes.Status204NoContent, "Component deleted")]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Component not found")]
     public async Task<IActionResult> DeleteComponent(
         [FromRoute] string technicianId,   
         [FromRoute] string componentId)

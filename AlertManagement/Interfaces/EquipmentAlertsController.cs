@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using Hampcoders.Electrolink.API.AlertManagement.Application;
 using Hampcoders.Electrolink.API.AlertManagement.Domain;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
@@ -25,7 +26,7 @@ public sealed class EquipmentAlertsController(AlertService alerts) : ControllerB
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try { return Ok(await action(new(actor.Id, storeId, areaId, equipmentId))); }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 }

@@ -28,6 +28,11 @@ public class RelayControlCommandRepository(AppDbContext context)
         => await Context.Set<RelayControlCommand>()
             .FirstOrDefaultAsync(c => c.CommandId == RelayCommandId.From(commandId));
 
+    public async Task<IReadOnlyList<RelayControlCommand>> FindUnansweredIssuedBeforeAsync(DateTime issuedBeforeUtc, int take)
+        => await Context.Set<RelayControlCommand>()
+            .Where(c => (c.Status == ERelayCommandStatus.Sent || c.Status == ERelayCommandStatus.Pending) && c.IssuedAt < issuedBeforeUtc)
+            .OrderBy(c => c.IssuedAt).Take(take).ToListAsync();
+
     public async Task UpdateAsync(RelayControlCommand cmd)
         => Context.Set<RelayControlCommand>().Update(cmd);
 }

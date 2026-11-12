@@ -175,9 +175,8 @@ public class ProfilesContextFacade(
     public async Task<string?> CreateStaffMemberAsync(string userId, string firstName, string lastName, string? phoneNumber)
     {
         var createStaffCmd = new Domain.Model.Commands.CreateStaffMemberCommand(userId, firstName, lastName, phoneNumber);
-        await staffMemberCommandService.Handle(createStaffCmd);
-        var staffMember = await staffMemberRepository.FindByUserIdAsync(userId);
-        return staffMember?.Id.Value;
+        var staffMember = await staffMemberCommandService.Handle(createStaffCmd);
+        return staffMember.Id.Value;
     }
 
     public async Task<(string Id, string UserId, string FirstName, string LastName, bool IsIoTCertified, string? Zone)?> GetStaffByUserIdAsync(string userId)

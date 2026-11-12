@@ -10,7 +10,7 @@ using Hampcoders.Electrolink.API.Planning.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 using RequireAccessRole = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.RequireAccessRoleAttribute;
 
 namespace Hampcoders.Electrolink.API.Planning.Interfaces.REST;

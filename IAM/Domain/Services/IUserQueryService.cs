@@ -30,6 +30,9 @@ public interface IUserQueryService
      * <returns>The list of users</returns>
      */
     Task<IEnumerable<User>> Handle(GetAllUsersQuery query);
+
+    /// <summary>Total number of users, for the paginated list.</summary>
+    Task<int> Handle(GetUsersCountQuery query);
     
     /**
      * <summary>

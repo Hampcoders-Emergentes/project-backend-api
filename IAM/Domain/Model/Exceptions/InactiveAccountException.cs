@@ -1,4 +1,9 @@
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
+
 namespace Hampcoders.Electrolink.API.IAM.Domain.Model.Exceptions;
 
 // M3.28: the account exists and the credentials are valid, but it is not Active (Suspended or PendingVerification).
-public sealed class InactiveAccountException() : Exception("Account is not active");
+public sealed class InactiveAccountException() : Exception("Account is not active"), ICodedError
+{
+    public string ErrorCode => ErrorCodes.AccountNotActive;
+}

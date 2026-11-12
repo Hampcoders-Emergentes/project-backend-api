@@ -21,16 +21,12 @@ public class DeviceReadingStreamCommandService(
 {
     public async Task<bool> Handle(IngestDeviceReadingCommand command)
     {
+        // Streams are provisioned explicitly with a real owner; an unknown device is never auto-registered.
         var stream = await streamRepository.FindByDeviceIdAsync(command.DeviceId);
         if (stream is null)
         {
-            logger.LogInformation("[IoT] Auto-creating stream for unknown device {DeviceId}.", command.DeviceId);
-            stream = DeviceReadingStream.Create(
-                DeviceId.From(command.DeviceId),
-                PropertyId.From("prop-edge-default"),
-                ClientIdentity.FromHomeowner("ho-edge-default"));
-            await streamRepository.AddAsync(stream);
-            await unitOfWork.CompleteAsync();
+            logger.LogWarning("[IoT] Reading rejected: device {DeviceId} is not registered.", command.DeviceId);
+            throw new KeyNotFoundException($"Device {command.DeviceId} is not registered.");
         }
 
         Reading reading;

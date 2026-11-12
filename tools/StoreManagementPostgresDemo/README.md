@@ -7,10 +7,10 @@ No ejecutar Program, EnsureCreated/Migrate o workers. El auxiliar requiere Docke
 
 ## Modo M3.5
 
-Con SDK/runtime .NET 9 disponible (no sustituirlo silenciosamente por .NET 10), desde la raíz:
+Con SDK/runtime .NET 11 disponible (no sustituirlo silenciosamente por otra versión), desde la raíz:
 
 ```bash
-M35_DOTNET=/private/tmp/electrolink-dotnet9/dotnet
+M35_DOTNET=/private/tmp/electrolink-dotnet11/dotnet
 "$M35_DOTNET" build tools/StoreManagementPostgresDemo/StoreManagementPostgresDemo.csproj --no-restore
 M35_REVIEW_DIR="$(mktemp -d "${TMPDIR:-/tmp}/electrolink-m35-review.XXXXXX")"
 M35_LEGACY_SQL="$M35_REVIEW_DIR/legacy.generated.sql"
@@ -52,7 +52,7 @@ Dobles restantes: centinelas que fallan para almacenamiento de archivos, HTTP sa
 Crear **otro** destino siguiendo la exportación offline, revisión y `prepare --legacy-schema` anteriores. No utilizar un manifiesto poblado de M3.5. Con `M36_MANIFEST` apuntando al manifiesto privado recién creado:
 
 ```bash
-/private/tmp/electrolink-dotnet9/dotnet \
+/private/tmp/electrolink-dotnet11/dotnet \
   tools/StoreManagementPostgresDemo/bin/Debug/net9.0/StoreManagementPostgresDemo.dll \
   --revocation "${M36_MANIFEST:?Manifiesto privado del destino nuevo}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop \
@@ -68,7 +68,7 @@ Se habilita además el handler real de Assets de DeviceDecommissionedEvent, que 
 Después de exportar/revisar el esquema heredado y hacer **prepare nuevo** con `--legacy-schema`, ejecutar:
 
 ```bash
-/private/tmp/electrolink-dotnet9/dotnet \
+/private/tmp/electrolink-dotnet11/dotnet \
   tools/StoreManagementPostgresDemo/bin/Debug/net9.0/StoreManagementPostgresDemo.dll \
   --retirement-http "${M37_MANIFEST:?Manifiesto privado del destino recién creado}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop \
@@ -85,7 +85,7 @@ Política confirmada y contrato del endpoint: [Assets/README.md](../../Assets/RE
 Reutiliza el esquema legado generado offline y revisado y el auxiliar `disposable.py prepare` descritos arriba, siempre con destino NUEVO y propio. No reutilizar las bases pobladas RED/GREEN ni imprimir el manifiesto.
 
 ```sh
-/private/tmp/electrolink-dotnet9/dotnet run --no-restore --project tools/StoreManagementPostgresDemo -- \
+/private/tmp/electrolink-dotnet11/dotnet run --no-restore --project tools/StoreManagementPostgresDemo -- \
   --device-read "${M38_MANIFEST:?Manifiesto privado del destino recién creado}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M38_MANIFEST}"
 ```
@@ -98,8 +98,8 @@ Dos usuarios IAM/HomeOwner reales, una propiedad y dos dispositivos sintéticos.
 Compilar con el SDK existente y --no-restore. Generar/revisar el DDL legado offline y usar `disposable.py prepare --legacy-schema` como en los modos anteriores, **siempre destino nuevo vacío y propio**. No reutilizar los manifiestos poblados de otras tareas.
 
 ```sh
-/private/tmp/electrolink-dotnet9/dotnet build tools/StoreManagementPostgresDemo --no-restore
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- \
+/private/tmp/electrolink-dotnet11/dotnet build tools/StoreManagementPostgresDemo --no-restore
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- \
   --measurement-history "${M39_MANIFEST:?Manifiesto privado del destino NUEVO}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M39_MANIFEST}"
 ```
@@ -112,8 +112,8 @@ Reutiliza RealBackendScenario y los casos HTTP de historial. Dos usuarios IAM/Ho
 Modo optativo `--company-http`, separado de las 204 pruebas xUnit. Usar únicamente un manifiesto del auxiliar existente para un PostgreSQL **nuevo, vacío y propio**, con DDL legado revisado como en los modos anteriores. No reutilizar los destinos ya poblados.
 
 ```sh
-/private/tmp/electrolink-dotnet9/dotnet build tools/StoreManagementPostgresDemo --no-restore
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- \
+/private/tmp/electrolink-dotnet11/dotnet build tools/StoreManagementPostgresDemo --no-restore
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- \
   --company-http "${M310_MANIFEST:?Manifiesto privado de un destino NUEVO}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M310_MANIFEST}"
 ```
@@ -132,8 +132,8 @@ La salida Company ahora distingue sign-up de complete/company. El TRX antiguo ap
 Si el volumen externo conserva AppleDouble de ediciones ajenas, compilar sin borrarlos:
 
 ```sh
-/private/tmp/electrolink-dotnet9/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- \
+/private/tmp/electrolink-dotnet11/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- \
   --company-layers "${COMPANY_LAYERS_MANIFEST:?Destino NUEVO del auxiliar}"
 ```
 
@@ -145,8 +145,8 @@ La opción MSBuild es temporal, conserva exclusiones de carpetas ocultas y omite
 Un solo modo nuevo `--alert-history <manifiesto>`. Después de compilar exitosamente (fail-fast), preparar destino PostgreSQL nuevo/vacío/propio con el auxiliar y DDL legado revisado, como en M3.10. Ejecutar y detener exclusivamente ese destino:
 
 ```sh
-/private/tmp/electrolink-dotnet9/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- \
+/private/tmp/electrolink-dotnet11/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- \
   --alert-history "${M311_MANIFEST:?Manifiesto privado del destino NUEVO}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M311_MANIFEST}"
 ```
@@ -162,12 +162,12 @@ Secuencia fail-fast (no ejecutar las líneas siguientes si falla build):
 
 ```sh
 set -e
-/private/tmp/electrolink-dotnet9/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --export-legacy-schema /private/tmp/electrolink-m312-legacy.NUEVO.sql
+/private/tmp/electrolink-dotnet11/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --export-legacy-schema /private/tmp/electrolink-m312-legacy.NUEVO.sql
 # Revisar el SQL exportado ANTES de preparar destino; no sobrescribir/reutilizar archivos o bases anteriores.
 python3 tools/StoreManagementPostgresDemo/disposable.py prepare --image cbdd40bde138 --legacy-schema /private/tmp/electrolink-m312-legacy.NUEVO.sql
 # Asignar M312_MANIFEST a la ruta privada recién emitida, sin imprimir contenido/secretos.
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --store-alert-history "${M312_MANIFEST:?Destino NUEVO vacío propio}"
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --store-alert-history "${M312_MANIFEST:?Destino NUEVO vacío propio}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M312_MANIFEST}"
 ```
 
@@ -182,12 +182,12 @@ Modo opt-in `--installation-http <manifiesto-nuevo>`. Usa el mismo auxiliar veri
 
 ```sh
 set -e
-/private/tmp/electrolink-dotnet9/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --export-legacy-schema /private/tmp/electrolink-m313-legacy.NUEVO.sql
+/private/tmp/electrolink-dotnet11/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --export-legacy-schema /private/tmp/electrolink-m313-legacy.NUEVO.sql
 # Revisar el export antes de aplicarlo; elegir ruta nueva.
 python3 tools/StoreManagementPostgresDemo/disposable.py prepare --image cbdd40bde138 --legacy-schema /private/tmp/electrolink-m313-legacy.NUEVO.sql
 # M313_MANIFEST debe ser el manifiesto privado recién emitido; no imprimir su contenido.
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --installation-http "${M313_MANIFEST:?Destino nuevo propio y vacío}"
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --installation-http "${M313_MANIFEST:?Destino nuevo propio y vacío}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M313_MANIFEST}"
 ```
 
@@ -202,11 +202,11 @@ Modo opt-in `--assignment-http <manifiesto-nuevo>`. Reutiliza el fixture real de
 
 ```sh
 set -e
-/private/tmp/electrolink-dotnet9/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --export-legacy-schema /private/tmp/electrolink-m314-legacy.NUEVO.sql
+/private/tmp/electrolink-dotnet11/dotnet build tools/StoreManagementPostgresDemo --no-restore '-p:DefaultItemExcludesInProjectFolder="**/.*/**;**/._*"'
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --export-legacy-schema /private/tmp/electrolink-m314-legacy.NUEVO.sql
 # Revisar export antes de preparar; elegir archivo nuevo.
 python3 tools/StoreManagementPostgresDemo/disposable.py prepare --image cbdd40bde138 --legacy-schema /private/tmp/electrolink-m314-legacy.NUEVO.sql
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --assignment-http "${M314_MANIFEST:?Manifiesto privado de destino nuevo}"
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --assignment-http "${M314_MANIFEST:?Manifiesto privado de destino nuevo}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M314_MANIFEST}"
 ```
 
@@ -220,7 +220,7 @@ Precondiciones de registro de stock, propiedades y preparación Planning siguen 
 Tras exportar/revisar el DDL offline y preparar un destino nuevo vacío propio con el auxiliar anterior:
 
 ```bash
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --assignment-race "${M315_MANIFEST:?Manifiesto privado nuevo}"
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --assignment-race "${M315_MANIFEST:?Manifiesto privado nuevo}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M315_MANIFEST:?Manifiesto privado propio}"
 ```
 
@@ -232,7 +232,7 @@ Compilar primero con la exclusión AppleDouble documentada. No reutilizar un man
 La política vigente es Technician activo con inventario existente, corregida por el usuario; la propuesta Admin/SuperAdmin fue descartada. Generar y revisar **otro** DDL offline con el modelo actual: incluye stock_technician_id nullable y su índice; no usar el export anterior sin esa columna. Preparar siempre destino nuevo vacío con ese DDL y 001/002/003, sin aplicar borradores a destinos existentes.
 
 ```bash
-/private/tmp/electrolink-dotnet9/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --registration-http "${M316_MANIFEST:?Manifiesto privado nuevo}"
+/private/tmp/electrolink-dotnet11/dotnet run --no-build --no-restore --project tools/StoreManagementPostgresDemo -- --registration-http "${M316_MANIFEST:?Manifiesto privado nuevo}"
 python3 tools/StoreManagementPostgresDemo/disposable.py stop "${M316_MANIFEST:?Manifiesto privado propio}"
 ```
 

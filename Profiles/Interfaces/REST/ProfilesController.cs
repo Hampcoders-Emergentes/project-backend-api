@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Tokens.Claims;
 using System.Net.Mime;
 using Hampcoders.Electrolink.API.Profiles.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Profiles.Domain.Model.Queries;
@@ -8,14 +9,14 @@ using Hampcoders.Electrolink.API.Profiles.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Shared.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Profiles.Interfaces.REST;
 
 [Route("api/v1/[controller]")]
 [Produces(MediaTypeNames.Application.Json)]
 [ServiceFilter(typeof(DomainExceptionFilter))]
-[SwaggerTag("Profile endpoints")]
+[ApiDocTag("Profile endpoints")]
 public class ProfilesController(
     IProfileCommandService commandService,
     IProfileQueryService queryService,
@@ -23,7 +24,7 @@ public class ProfilesController(
 {
     // GET api/v1/profiles/me
     [HttpGet("me")]
-    [SwaggerOperation(Summary = "Get my profile", OperationId = "GetMyProfile")]
+    [ApiDocOperation(Summary = "Get my profile", OperationId = "GetMyProfile")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMyProfile()
@@ -35,7 +36,8 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/complete/technician
     [HttpPost("me/complete/technician")]
-    [SwaggerOperation(Summary = "Complete profile as technician", OperationId = "CompleteAsTechnician")]
+    [RefreshesAccessToken]
+    [ApiDocOperation(Summary = "Complete profile as technician", OperationId = "CompleteAsTechnician")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status201Created)]
     public async Task<IActionResult> CompleteAsTechnician(
         [FromBody] CompleteProfileAsTechnicianResource resource)
@@ -49,7 +51,8 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/complete/homeowner
     [HttpPost("me/complete/homeowner")]
-    [SwaggerOperation(Summary = "Complete profile as homeowner", OperationId = "CompleteAsHomeowner")]
+    [RefreshesAccessToken]
+    [ApiDocOperation(Summary = "Complete profile as homeowner", OperationId = "CompleteAsHomeowner")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status201Created)]
     public async Task<IActionResult> CompleteAsHomeowner(
         [FromBody] CompleteProfileAsHomeownerResource resource)
@@ -63,7 +66,8 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/complete/company
     [HttpPost("me/complete/company")]
-    [SwaggerOperation(Summary = "Complete profile as company", OperationId = "CompleteAsCompany")]
+    [RefreshesAccessToken]
+    [ApiDocOperation(Summary = "Complete profile as company", OperationId = "CompleteAsCompany")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status201Created)]
     public async Task<IActionResult> CompleteAsCompany(
         [FromBody] CompleteProfileAsCompanyResource resource)
@@ -77,7 +81,7 @@ public class ProfilesController(
 
     // GET api/v1/profiles/me/status
     [HttpGet("me/status")]
-    [SwaggerOperation(Summary = "Get profile status", OperationId = "GetProfileStatus")]
+    [ApiDocOperation(Summary = "Get profile status", OperationId = "GetProfileStatus")]
     [ProducesResponseType(typeof(ProfileStatusResource), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetProfileStatus()
@@ -89,7 +93,7 @@ public class ProfilesController(
 
     // PATCH api/v1/profiles/me/personal-data
     [HttpPatch("me/personal-data")]
-    [SwaggerOperation(Summary = "Update personal data", OperationId = "UpdatePersonalData")]
+    [ApiDocOperation(Summary = "Update personal data", OperationId = "UpdatePersonalData")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdatePersonalData(
         [FromBody] UpdatePersonalDataResource resource)
@@ -105,7 +109,7 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/picture
     [HttpPost("me/picture")]
-    [SwaggerOperation(Summary = "Upload profile picture", OperationId = "UploadProfilePicture")]
+    [ApiDocOperation(Summary = "Upload profile picture", OperationId = "UploadProfilePicture")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status200OK)]
     public async Task<IActionResult> UploadProfilePicture(IFormFile file)
     {
@@ -122,7 +126,7 @@ public class ProfilesController(
 
     // PATCH api/v1/profiles/me/technician
     [HttpPatch("me/technician")]
-    [SwaggerOperation(Summary = "Update technician data", OperationId = "UpdateTechnicianData")]
+    [ApiDocOperation(Summary = "Update technician data", OperationId = "UpdateTechnicianData")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateTechnicianData(
         [FromBody] UpdateTechnicianDataRequest resource)
@@ -138,7 +142,7 @@ public class ProfilesController(
 
     // PATCH api/v1/profiles/me/homeowner
     [HttpPatch("me/homeowner")]
-    [SwaggerOperation(Summary = "Update homeowner preferences", OperationId = "UpdateHomeownerPreferences")]
+    [ApiDocOperation(Summary = "Update homeowner preferences", OperationId = "UpdateHomeownerPreferences")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateHomeownerPreferences(
         [FromBody] UpdateHomeownerPreferencesResource resource)
@@ -154,7 +158,8 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/deactivate
     [HttpPost("me/deactivate")]
-    [SwaggerOperation(Summary = "Deactivate profile", OperationId = "DeactivateProfile")]
+    [RefreshesAccessToken]
+    [ApiDocOperation(Summary = "Deactivate profile", OperationId = "DeactivateProfile")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeactivateProfile(
         [FromBody] DeactivateProfileResource resource)
@@ -172,7 +177,8 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/reactivate
     [HttpPost("me/reactivate")]
-    [SwaggerOperation(Summary = "Reactivate profile", OperationId = "ReactivateProfile")]
+    [RefreshesAccessToken]
+    [ApiDocOperation(Summary = "Reactivate profile", OperationId = "ReactivateProfile")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status200OK)]
     public async Task<IActionResult> ReactivateProfile()
     {
@@ -189,7 +195,7 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/photo/upload-url
     [HttpPost("me/photo/upload-url")]
-    [SwaggerOperation(Summary = "Get signed upload URL for profile photo", OperationId = "GetProfilePhotoUploadUrl")]
+    [ApiDocOperation(Summary = "Get signed upload URL for profile photo", OperationId = "GetProfilePhotoUploadUrl")]
     [ProducesResponseType(typeof(SignedUploadUrlResource), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetProfilePhotoUploadUrl()
     {
@@ -205,7 +211,7 @@ public class ProfilesController(
 
     // PUT api/v1/profiles/me/photo
     [HttpPut("me/photo")]
-    [SwaggerOperation(Summary = "Update profile photo after direct upload", OperationId = "UpdateProfilePhoto")]
+    [ApiDocOperation(Summary = "Update profile photo after direct upload", OperationId = "UpdateProfilePhoto")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpdateProfilePhoto(
         [FromBody] UpdateProfilePhotoResource resource)
@@ -221,7 +227,7 @@ public class ProfilesController(
 
     // PUT api/v1/profiles/{profileId}/thresholds
     [HttpPut("{profileId}/thresholds")]
-    [SwaggerOperation(Summary = "Set consumption thresholds", OperationId = "SetConsumptionThresholds")]
+    [ApiDocOperation(Summary = "Set consumption thresholds", OperationId = "SetConsumptionThresholds")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SetThresholds(
@@ -237,7 +243,7 @@ public class ProfilesController(
 
     // DELETE api/v1/profiles/me/photo
     [HttpDelete("me/photo")]
-    [SwaggerOperation(Summary = "Remove profile photo", OperationId = "RemoveProfilePhoto")]
+    [ApiDocOperation(Summary = "Remove profile photo", OperationId = "RemoveProfilePhoto")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> RemoveProfilePhoto()
     {

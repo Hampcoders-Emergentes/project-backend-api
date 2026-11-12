@@ -57,16 +57,22 @@ public class User : BaseAggregateRoot
         RaiseDomainEvent(new UserAccountActivatedEvent(Id.Value, DateTime.UtcNow));
     }
 
+    /// <summary>
+    ///     Issues a new reset secret (replacing any previous one). The secret travels only in the raised event,
+    ///     which is delivered in memory to the notifier; the aggregate keeps its hash.
+    /// </summary>
     public void RequestPasswordReset()
     {
-        PasswordResetToken = PasswordResetToken.Generate();
-        RaiseDomainEvent(new PasswordResetRequestedEvent(
-            Id.Value, Email.Value, PasswordResetToken.Value, PasswordResetToken.ExpiresAt, DateTime.UtcNow));
+        var now = DateTime.UtcNow;
+        var (token, secret) = PasswordResetToken.Issue(now);
+        PasswordResetToken = token;
+        RaiseDomainEvent(new PasswordResetRequestedEvent(Id.Value, Email.Value, secret, token.ExpiresAt, now));
     }
 
+    /// <summary>Consumes the reset secret: valid once, before it expires.</summary>
     public void ResetPassword(string token, string newPasswordHash)
     {
-        if (PasswordResetToken == null || !PasswordResetToken.IsValid(token))
+        if (PasswordResetToken == null || !PasswordResetToken.IsValid(token, DateTime.UtcNow))
             throw new ArgumentException("Reset token is invalid or expired.");
 
         PasswordHash = HashedPassword.FromHash(newPasswordHash);

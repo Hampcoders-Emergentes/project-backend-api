@@ -10,4 +10,6 @@ public interface IRelayControlCommandRepository : IBaseRepository<RelayControlCo
     Task<IEnumerable<RelayControlCommand>> FindHistoryByDeviceAsync(string deviceId);
     Task<RelayControlCommand?> FindByCommandIdAsync(string commandId);
     Task UpdateAsync(RelayControlCommand cmd);
+    /// <summary>Pending/Sent commands issued before <paramref name="issuedBeforeUtc"/> that nobody answered.</summary>
+    Task<IReadOnlyList<RelayControlCommand>> FindUnansweredIssuedBeforeAsync(DateTime issuedBeforeUtc, int take);
 }

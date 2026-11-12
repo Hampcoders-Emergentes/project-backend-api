@@ -5,7 +5,7 @@ using Hampcoders.Electrolink.API.Planning.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Planning.Domain.Services;
 using Hampcoders.Electrolink.API.Planning.Interfaces.REST.Resources;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Planning.Interfaces.REST;
 
@@ -13,7 +13,7 @@ namespace Hampcoders.Electrolink.API.Planning.Interfaces.REST;
 [ApiController]
 [Route("api/v1/dispatch")]
 [Produces(MediaTypeNames.Application.Json)]
-[SwaggerTag("Dispatch Management (Admin / FieldManager)")]
+[ApiDocTag("Dispatch Management (Admin / FieldManager)")]
 public class DispatchController(
     IServiceAssignmentCommandService assignmentCommandService,
     IServiceRequestCommandService requestCommandService) : ControllerBase
@@ -23,7 +23,7 @@ public class DispatchController(
         Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects.AccessRole.Admin,
         Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects.AccessRole.SuperAdmin,
         Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects.AccessRole.FieldManager)]
-    [SwaggerOperation(Summary = "Assign a staff member (Maker) to a service request")]
+    [ApiDocOperation(Summary = "Assign a staff member (Maker) to a service request")]
     public async Task<IActionResult> AssignStaff([FromBody] AssignStaffResource resource)
     {
         try

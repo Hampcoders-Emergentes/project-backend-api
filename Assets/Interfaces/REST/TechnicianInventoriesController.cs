@@ -8,23 +8,24 @@ using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 
 namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 
 [ApiController]
 [Route("api/v1/technicians/{technicianId}/inventory")]
 [Produces(MediaTypeNames.Application.Json)]
-[SwaggerTag("Technician Inventory Endpoints")]
+[ApiDocTag("Technician Inventory Endpoints")]
 // M3.24: the route technicianId must be the authenticated technician's own subject (TechnicianRoute).
 public class TechnicianInventoriesController(ITechnicianInventoryCommandService inventoryCommandService, ITechnicianInventoryQueryService inventoryQueryService,
     IProfilesContextFacade profiles) : ControllerBase
 {
     [HttpPost]
-    [SwaggerOperation(Summary = "Create technician inventory", OperationId = "CreateTechnicianInventory")]
-    [SwaggerResponse(StatusCodes.Status201Created, "Inventory created successfully")]
-    [SwaggerResponse(StatusCodes.Status409Conflict, "Inventory already exists for this technician")]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Could not create inventory")]
+    [ApiDocOperation(Summary = "Create technician inventory", OperationId = "CreateTechnicianInventory")]
+    [ApiDocResponse(StatusCodes.Status201Created, "Inventory created successfully")]
+    [ApiDocResponse(StatusCodes.Status409Conflict, "Inventory already exists for this technician")]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Could not create inventory")]
     public async Task<IActionResult> CreateTechnicianInventory([FromRoute] string technicianId)
     {
         var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
@@ -46,10 +47,10 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     }
 
     [HttpPost("stock-items")]
-    [SwaggerOperation(Summary = "Add stock item to technician inventory", OperationId = "AddStockItemToInventory")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Stock item added successfully", typeof(TechnicianInventoryResource))]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Failed to add stock item")]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Inventory not found")]
+    [ApiDocOperation(Summary = "Add stock item to technician inventory", OperationId = "AddStockItemToInventory")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Stock item added successfully", typeof(TechnicianInventoryResource))]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Failed to add stock item")]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Inventory not found")]
     public async Task<IActionResult> AddStockItemToInventory([FromRoute] string technicianId, [FromBody] AddStockToInventoryResource resource)
     {
         var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
@@ -71,9 +72,9 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     }
 
     [HttpPut("{componentId}")]
-    [SwaggerOperation(Summary = "Update component stock in technician inventory", OperationId = "UpdateComponentStock")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Inventory updated", typeof(TechnicianInventoryResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Inventory or component not found")]
+    [ApiDocOperation(Summary = "Update component stock in technician inventory", OperationId = "UpdateComponentStock")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Inventory updated", typeof(TechnicianInventoryResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Inventory or component not found")]
     public async Task<IActionResult> UpdateComponentStock(
         [FromRoute] string technicianId,
         [FromRoute] string componentId,
@@ -95,9 +96,9 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     }
 
     [HttpDelete("{componentId}")]
-    [SwaggerOperation(Summary = "Remove component from technician inventory", OperationId = "RemoveComponentStock")]
-    [SwaggerResponse(StatusCodes.Status204NoContent, "Component removed from inventory")]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Component or inventory not found")]
+    [ApiDocOperation(Summary = "Remove component from technician inventory", OperationId = "RemoveComponentStock")]
+    [ApiDocResponse(StatusCodes.Status204NoContent, "Component removed from inventory")]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Component or inventory not found")]
     public async Task<IActionResult> RemoveComponentStock([FromRoute] string technicianId, [FromRoute] string componentId)
     {
         var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
@@ -117,9 +118,9 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     }
 
     [HttpGet]
-    [SwaggerOperation(Summary = "Get technician inventory by technician ID", OperationId = "GetInventoryByTechnicianId")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Inventory found", typeof(TechnicianInventoryResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Inventory not found")]
+    [ApiDocOperation(Summary = "Get technician inventory by technician ID", OperationId = "GetInventoryByTechnicianId")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Inventory found", typeof(TechnicianInventoryResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Inventory not found")]
     public async Task<IActionResult> GetInventoryByTechnicianId([FromRoute] string technicianId)
     {
         var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
@@ -133,10 +134,10 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     }
 
     [HttpPatch("{componentId}/increase")]
-    [SwaggerOperation(Summary = "Increase stock for a component in inventory", OperationId = "IncreaseComponentStock")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Stock increased", typeof(TechnicianInventoryResource))]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Invalid amount")]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Inventory or component not found")]
+    [ApiDocOperation(Summary = "Increase stock for a component in inventory", OperationId = "IncreaseComponentStock")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Stock increased", typeof(TechnicianInventoryResource))]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Invalid amount")]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Inventory or component not found")]
     public async Task<IActionResult> IncreaseComponentStock(
         [FromRoute] string technicianId,
         [FromRoute] string componentId,
@@ -164,10 +165,10 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     }
 
     [HttpPatch("{componentId}/decrease")]
-    [SwaggerOperation(Summary = "Decrease stock for a component in inventory", OperationId = "DecreaseComponentStock")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Stock decreased", typeof(TechnicianInventoryResource))]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Invalid amount or insufficient stock")]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Inventory or component not found")]
+    [ApiDocOperation(Summary = "Decrease stock for a component in inventory", OperationId = "DecreaseComponentStock")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Stock decreased", typeof(TechnicianInventoryResource))]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Invalid amount or insufficient stock")]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Inventory or component not found")]
     public async Task<IActionResult> DecreaseComponentStock(
         [FromRoute] string technicianId,
         [FromRoute] string componentId,
@@ -195,9 +196,9 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
     }
 
     [HttpGet("stock-items")]
-    [SwaggerOperation(Summary = "Get Technician Inventory Stock Items", OperationId = "GetTechnicianInventoryStockItems")]
-    [SwaggerResponse(StatusCodes.Status200OK, "The list of stock items with component details", typeof(IEnumerable<ComponentStockResource>))]
-    public async Task<IActionResult> GetInventoryItems([FromRoute] string technicianId)
+    [ApiDocOperation(Summary = "Get Technician Inventory Stock Items", OperationId = "GetTechnicianInventoryStockItems")]
+    [ApiDocResponse(StatusCodes.Status200OK, "The list of stock items with component details", typeof(PagedResponse<ComponentStockResource>))]
+    public async Task<IActionResult> GetInventoryItems([FromRoute] string technicianId, [FromQuery] PageRequest paging)
     {
         var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
         if (denied is not null) return denied;
@@ -214,7 +215,7 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
             item.LastUpdated
         ));
 
-        return Ok(resources);
+        return Ok(PagedResponse.From(resources, paging));
     }
     
     private async Task<TechnicianInventoryResource> BuildResponseAsync(string technicianId)

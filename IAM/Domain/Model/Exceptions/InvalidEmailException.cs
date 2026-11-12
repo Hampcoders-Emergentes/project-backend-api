@@ -1,14 +1,17 @@
 using System.Runtime.Serialization;
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
 
 namespace Hampcoders.Electrolink.API.IAM.Domain.Model.Exceptions;
 
 [Serializable]
-public class InvalidEmailException : Exception
+public class InvalidEmailException : Exception, ICodedError
 {
+    public string ErrorCode => ErrorCodes.ValidationFailed;
+
     public string RawValue { get; }
 
     public InvalidEmailException(string rawValue)
-        : base($"Invalid email: '{rawValue}'")
+        : base("The email address is not valid.")
     {
         RawValue = rawValue;
     }

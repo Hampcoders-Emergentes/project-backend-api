@@ -50,10 +50,12 @@ public class UserRepository(AppDbContext context) : BaseRepository<User, UserId>
             .ToListAsync();
     }
 
-    public async Task<User?> FindByPasswordResetTokenAsync(string resetToken)
+    public Task<int> CountAsync() => Context.Set<User>().CountAsync();
+
+    public async Task<User?> FindByPasswordResetTokenAsync(string resetTokenHash)
     {
         return await Context.Set<User>()
             .FirstOrDefaultAsync(u =>
-                u.PasswordResetToken != null && u.PasswordResetToken.Value == resetToken);
+                u.PasswordResetToken != null && u.PasswordResetToken.Value == resetTokenHash);
     }
 }

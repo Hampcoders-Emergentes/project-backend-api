@@ -8,7 +8,6 @@ using Hampcoders.Electrolink.API.Processing.Application.Internal.OutboundService
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Domain.Repositories;
 using MediatR;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Hampcoders.Electrolink.API.Processing.Application.Internal.CommandServices;
 
@@ -21,7 +20,6 @@ public class RelayCommandService(
     IMqttSubscriptionService       mqttService,
     IUnitOfWork                    unitOfWork,
     IMediator                      mediator,
-    IServiceScopeFactory           scopeFactory,
     ILogger<RelayCommandService>   logger)
     : IRelayCommandService
 {
@@ -91,36 +89,7 @@ public class RelayCommandService(
         logger.LogInformation(
             "[IoT] RelayCommandIssued — DeviceId: {DeviceId} | Target: {Target} | By: {By} | MQTT: published",
             command.DeviceId, command.TargetRelayState, command.TechnicianId);
-
-        var commandId = relayCmd.CommandId.Value;
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(TimeSpan.FromSeconds(30));
-            try
-            {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var repo = scope.ServiceProvider.GetRequiredService<IRelayControlCommandRepository>();
-                var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                var med = scope.ServiceProvider.GetRequiredService<IMediator>();
-
-                var fresh = await repo.FindByCommandIdAsync(commandId);
-                if (fresh is not null &&
-                    fresh.Status is ERelayCommandStatus.Sent or ERelayCommandStatus.Pending)
-                {
-                    fresh.MarkAsTimeout();
-                    await repo.UpdateAsync(fresh);
-                    await uow.CompleteAsync();
-
-                    foreach (var ev in fresh.DomainEvents)
-                        await med.Publish(ev, CancellationToken.None);
-                    fresh.ClearDomainEvents();
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "[IoT] RelayTimeout check failed for command {CommandId}", commandId);
-            }
-        });
+        // Unanswered commands are timed out by RelayCommandTimeoutWorker (restart-safe, supervised).
     }
 
     public async Task Handle(AcknowledgeRelayExecutionCommand command)

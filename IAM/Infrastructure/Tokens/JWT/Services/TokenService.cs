@@ -57,7 +57,9 @@ public class TokenService(IOptions<TokenSettings> tokenSettings, ILogger<TokenSe
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddDays(7),
+            Issuer = _tokenSettings.Issuer,
+            Audience = _tokenSettings.Audience,
+            Expires = DateTime.UtcNow.AddMinutes(_tokenSettings.AccessTokenMinutes),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(key),
                 SecurityAlgorithms.HmacSha256Signature)
@@ -82,19 +84,11 @@ public class TokenService(IOptions<TokenSettings> tokenSettings, ILogger<TokenSe
             return null;
         // Otherwise, perform validation
         var tokenHandler = new JsonWebTokenHandler();
-        var key = Encoding.ASCII.GetBytes(_tokenSettings.Secret);
         try
         {
-            var tokenValidationResult = await tokenHandler.ValidateTokenAsync(token, new TokenValidationParameters
-            {
-                ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(key),
-                ValidateIssuer = false,
-                ValidateAudience = false,
-                // Expiration without delay
-                ClockSkew = TimeSpan.Zero
-            });
+            var tokenValidationResult = await tokenHandler.ValidateTokenAsync(token, _tokenSettings.CreateValidationParameters());
 
+            if (!tokenValidationResult.IsValid) return null;
             var jwtToken = (JsonWebToken)tokenValidationResult.SecurityToken;
             var userId = jwtToken.Claims.First(claim => claim.Type == ClaimTypes.NameIdentifier).Value;
             return userId;
@@ -105,4 +99,13 @@ public class TokenService(IOptions<TokenSettings> tokenSettings, ILogger<TokenSe
             return null;
         }
     }
+
+    public string GenerateRefreshTokenValue() =>
+        Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48))
+            .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+
+    public string HashRefreshToken(string refreshToken) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken)));
+
+    public TimeSpan RefreshTokenLifetime => TimeSpan.FromDays(_tokenSettings.RefreshTokenDays);
 }

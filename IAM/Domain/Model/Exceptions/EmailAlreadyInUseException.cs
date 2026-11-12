@@ -1,20 +1,22 @@
 ﻿using System.Runtime.Serialization;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
 
 namespace Hampcoders.Electrolink.API.IAM.Domain.Model.Exceptions;
 
 [Serializable]
-public class EmailAlreadyInUseException : Exception
+public class EmailAlreadyInUseException : Exception, ICodedError
 {
-    public string Email { get; }
+    public string Email { get; } = string.Empty;
+    public string ErrorCode => ErrorCodes.EmailAlreadyRegistered;
 
     public EmailAlreadyInUseException()
     { }
 
     public EmailAlreadyInUseException(Email? email)
-        : base(email is null ? "An email is already in use." : $"The email '{email}' is already in use.")
+        : base("The email address is already registered.")
     {
-        Email = email?.ToString() ?? string.Empty;
+        Email = email?.Value ?? string.Empty;
     }
 
     public EmailAlreadyInUseException(string? message, Exception? innerException)

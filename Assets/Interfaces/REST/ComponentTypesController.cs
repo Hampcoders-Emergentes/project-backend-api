@@ -7,7 +7,8 @@ using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 
 namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 
@@ -16,7 +17,7 @@ namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 /// </summary>
 [ApiController]
 [Route("api/v1/technicians/{technicianId}/[controller]")]
-[SwaggerTag("Component Types Management")]
+[ApiDocTag("Component Types Management")]
 // M3.25: global catalogue; see ComponentCatalogAccess for the read/write policy.
 public class ComponentTypesController(
     IComponentTypeCommandService componentTypeCommandService,
@@ -24,9 +25,9 @@ public class ComponentTypesController(
     IProfilesContextFacade profiles) : ControllerBase
 {
     [HttpPost]
-    [SwaggerOperation(Summary = "Create Component Type", OperationId = "CreateComponentType")]
-    [SwaggerResponse(StatusCodes.Status201Created, "Component type created", typeof(ComponentTypeResource))]
-    [SwaggerResponse(StatusCodes.Status400BadRequest, "Component type could not be created")]
+    [ApiDocOperation(Summary = "Create Component Type", OperationId = "CreateComponentType")]
+    [ApiDocResponse(StatusCodes.Status201Created, "Component type created", typeof(ComponentTypeResource))]
+    [ApiDocResponse(StatusCodes.Status400BadRequest, "Component type could not be created")]
     public async Task<IActionResult> CreateComponentType(
         [FromRoute] string technicianId,
         [FromBody] CreateComponentTypeResource resource)
@@ -38,15 +39,16 @@ public class ComponentTypesController(
             var componentType = await componentTypeCommandService.Handle(command);
             if (componentType is null) return BadRequest();
 
-            return Ok(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType));
+            var created = ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType);
+            return CreatedAtRoute(nameof(GetComponentTypeById), new { technicianId, typeId = componentType.Id.Value }, created);
         }
         catch (DuplicateAssetException ex) { return Conflict(new { message = ex.Message }); }
     }
 
     [HttpGet("{typeId}", Name = nameof(GetComponentTypeById))]
-    [SwaggerOperation(Summary = "Get Component Type by Id", OperationId = "GetComponentTypeById")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Component type found", typeof(ComponentTypeResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Component type not found")]
+    [ApiDocOperation(Summary = "Get Component Type by Id", OperationId = "GetComponentTypeById")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Component type found", typeof(ComponentTypeResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Component type not found")]
     public async Task<IActionResult> GetComponentTypeById(
         [FromRoute] string technicianId,  
         [FromRoute] string typeId)
@@ -61,22 +63,21 @@ public class ComponentTypesController(
     }
 
     [HttpGet]
-    [SwaggerOperation(Summary = "Get All Component Types", OperationId = "GetAllComponentTypes")]
-    [SwaggerResponse(StatusCodes.Status200OK, "List of component types retrieved", typeof(IEnumerable<ComponentTypeResource>))]
-    public async Task<IActionResult> GetAllComponentTypes([FromRoute] string technicianId)  
+    [ApiDocOperation(Summary = "Get All Component Types", OperationId = "GetAllComponentTypes")]
+    [ApiDocResponse(StatusCodes.Status200OK, "List of component types retrieved", typeof(PagedResponse<ComponentTypeResource>))]
+    public async Task<IActionResult> GetAllComponentTypes([FromRoute] string technicianId, [FromQuery] PageRequest paging)
     {
         var denied = await ComponentCatalogAccess.AuthorizeReadAsync(this, profiles, technicianId);
         if (denied is not null) return denied;
         var query = new GetAllComponentTypesQuery();
         var componentTypes = await componentTypeQueryService.Handle(query);
-        var resources = componentTypes.Select(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity);
-        return Ok(resources);
+        return Ok(PagedResponse.From(componentTypes.Select(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity), paging));
     }
 
     [HttpPut("{typeId}")]
-    [SwaggerOperation(Summary = "Update Component Type", OperationId = "UpdateComponentType")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Component type updated", typeof(ComponentTypeResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Component type not found")]
+    [ApiDocOperation(Summary = "Update Component Type", OperationId = "UpdateComponentType")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Component type updated", typeof(ComponentTypeResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Component type not found")]
     public async Task<IActionResult> UpdateComponentType(
         [FromRoute] string technicianId, 
         [FromRoute] string typeId,
@@ -95,9 +96,9 @@ public class ComponentTypesController(
     }
 
     [HttpDelete("{typeId}")]
-    [SwaggerOperation(Summary = "Delete Component Type", OperationId = "DeleteComponentType")]
-    [SwaggerResponse(StatusCodes.Status204NoContent, "Component type deleted")]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Component type not found")]
+    [ApiDocOperation(Summary = "Delete Component Type", OperationId = "DeleteComponentType")]
+    [ApiDocResponse(StatusCodes.Status204NoContent, "Component type deleted")]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Component type not found")]
     public async Task<IActionResult> DeleteComponentType(
         [FromRoute] string technicianId,  
         [FromRoute] string typeId)
@@ -116,10 +117,10 @@ public class ComponentTypesController(
     }
 
     [HttpPatch("{typeId}/activate")]
-    [SwaggerOperation(Summary = "Activate Component Type", OperationId = "ActivateComponentType")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Component type activated", typeof(ComponentTypeResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Component type not found")]
-    [SwaggerResponse(StatusCodes.Status409Conflict, "Component type is already active")]
+    [ApiDocOperation(Summary = "Activate Component Type", OperationId = "ActivateComponentType")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Component type activated", typeof(ComponentTypeResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Component type not found")]
+    [ApiDocResponse(StatusCodes.Status409Conflict, "Component type is already active")]
     public async Task<IActionResult> ActivateComponentType(
         [FromRoute] string technicianId,
         [FromRoute] string typeId)
@@ -137,10 +138,10 @@ public class ComponentTypesController(
     }
 
     [HttpPatch("{typeId}/deactivate")]
-    [SwaggerOperation(Summary = "Deactivate Component Type", OperationId = "DeactivateComponentType")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Component type deactivated", typeof(ComponentTypeResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Component type not found")]
-    [SwaggerResponse(StatusCodes.Status409Conflict, "Component type is already inactive")]
+    [ApiDocOperation(Summary = "Deactivate Component Type", OperationId = "DeactivateComponentType")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Component type deactivated", typeof(ComponentTypeResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Component type not found")]
+    [ApiDocResponse(StatusCodes.Status409Conflict, "Component type is already inactive")]
     public async Task<IActionResult> DeactivateComponentType(
         [FromRoute] string technicianId,
         [FromRoute] string typeId)

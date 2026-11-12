@@ -23,6 +23,9 @@ public class RequireAccessRoleAttribute(params AccessRole[] roles) : Attribute, 
         }
 
         if (_roles.Length > 0 && !_roles.Contains(user.Role))
-            context.Result = new ForbidResult();
+            context.Result = new ObjectResult(new { message = "Your access role does not allow this action." })
+            {
+                StatusCode = StatusCodes.Status403Forbidden
+            };
     }
 }

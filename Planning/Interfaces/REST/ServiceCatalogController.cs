@@ -35,7 +35,7 @@ public class ServiceCatalogController(
         return (TechnicianId.From(own.TechnicianId), ProfileId.From(own.ProfileId), null);
     }
     [HttpPost]
-    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ServiceCatalogResource), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateCatalog([FromRoute] string technicianId)
     {
@@ -45,8 +45,12 @@ public class ServiceCatalogController(
         {
             var command = new CreateServiceCatalogCommand(technician!, profile!);
             await commandService.Handle(command);
-            
-            return StatusCode(StatusCodes.Status201Created);
+
+            var catalog = await queryService.Handle(new GetServiceCatalogQuery(technician!));
+            return catalog is null
+                ? StatusCode(StatusCodes.Status201Created)
+                : CreatedAtAction(nameof(GetCatalog), new { technicianId = technician!.Value },
+                    ServiceCatalogResourceFromEntityAssembler.ToResource(catalog));
         }
         catch (CatalogAlreadyExistsException ex)
         {
@@ -68,7 +72,7 @@ public class ServiceCatalogController(
     }
 
     [HttpPost("recipes")]
-    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ServiceRecipeDetailResource), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -91,7 +95,7 @@ public class ServiceCatalogController(
             return CreatedAtAction(
                 nameof(GetRecipeDetails),
                 new { technicianId = technician!.Value, recipeId = recipe.Id.Value },
-                new { recipeId = recipe.Id.Value });
+                ServiceRecipeDetailResourceFromEntityAssembler.ToResource(recipe));
         }
         catch (DuplicateRecipeNameException ex) { return Conflict(new { message = ex.Message }); }
         catch (InvalidPricingException ex)      { return BadRequest(new { message = ex.Message }); }

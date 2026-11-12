@@ -9,6 +9,7 @@ using Hampcoders.Electrolink.API.Planning.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Planning.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.Shared.Domain.Repositories;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Hampcoders.Electrolink.API.Planning.Interfaces.REST;
@@ -46,13 +47,13 @@ public class ServiceSuggestionController(
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<ServiceSuggestionResource>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<ServiceSuggestionResource>>> GetActiveSuggestions()
+    [ProducesResponseType(typeof(PagedResponse<ServiceSuggestionResource>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResponse<ServiceSuggestionResource>>> GetActiveSuggestions([FromQuery] PageRequest paging)
     {
         var (client, denied) = await ResolveClientAsync();
         if (denied is not null) return denied;
         var suggestions = await queryService.GetActiveByClientIdAsync(client!.ClientId);
-        return Ok(suggestions.Select(ServiceSuggestionResourceFromEntityAssembler.ToResource));
+        return Ok(PagedResponse.From(suggestions.Select(ServiceSuggestionResourceFromEntityAssembler.ToResource), paging));
     }
 
     [HttpPatch("{suggestionId}/viewed")]

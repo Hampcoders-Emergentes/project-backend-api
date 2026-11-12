@@ -36,15 +36,9 @@ public static class ControllerBaseExtensions
     {
         var userId = controller.GetAuthenticatedUserId();
         
+        // The message becomes the "detail" of the 403 error envelope, so it must not echo the token's claims.
         if (!userId.HasValue)
-        {
-            // Para debugging: mostrar todos los claims disponibles
-            var availableClaims = string.Join(", ", 
-                controller.User.Claims.Select(c => $"{c.Type}={c.Value}"));
-            
-            throw new UnauthorizedAccessException(
-                $"User ID not found in authentication token. Available claims: {availableClaims}");
-        }
+            throw new UnauthorizedAccessException("User ID not found in authentication token.");
 
         return userId.Value;
     }

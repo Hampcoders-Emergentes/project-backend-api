@@ -2,14 +2,14 @@ using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Profiles.Domain.Services;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.REST.Resources;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Profiles.Interfaces.REST;
 
 [Route("api/v1/profiles/me/device-onboarding")]
 [ApiController]
 [Produces("application/json")]
-[SwaggerTag("Device Onboarding endpoints")]
+[ApiDocTag("Device Onboarding endpoints")]
 public class DeviceOnboardingController(
     IDeviceOnboardingService onboardingService)
     : ControllerBase
@@ -32,7 +32,7 @@ public class DeviceOnboardingController(
     }
 
     [HttpPost("analyze")]
-    [SwaggerOperation(Summary = "Analyze device and suggest thresholds", OperationId = "AnalyzeDeviceOnboarding")]
+    [ApiDocOperation(Summary = "Analyze device and suggest thresholds", OperationId = "AnalyzeDeviceOnboarding")]
     [ProducesResponseType(typeof(DeviceOnboardingAnalysisResource), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -56,7 +56,7 @@ public class DeviceOnboardingController(
     }
 
     [HttpPost("adjust")]
-    [SwaggerOperation(Summary = "Adjust thresholds based on user feedback", OperationId = "AdjustDeviceOnboarding")]
+    [ApiDocOperation(Summary = "Adjust thresholds based on user feedback", OperationId = "AdjustDeviceOnboarding")]
     [ProducesResponseType(typeof(DeviceOnboardingAnalysisResource), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

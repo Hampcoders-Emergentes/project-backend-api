@@ -22,7 +22,7 @@ public class TechnicianMetrics : BaseAggregateRoot
     private decimal _totalRatingSum;
     private long _totalResponseTimeTicks;
     private int _returningClientCount;
-    private HashSet<string> _servedHomeownerIds;
+    private HashSet<string> _servedClientIds;
 
     private TechnicianMetrics() { }
 
@@ -44,12 +44,12 @@ public class TechnicianMetrics : BaseAggregateRoot
             _totalRatingSum = 0,
             _totalResponseTimeTicks = 0,
             _returningClientCount = 0,
-            _servedHomeownerIds = new HashSet<string>()
+            _servedClientIds = new HashSet<string>()
         };
     }
 
     public void ApplyServiceCompleted(
-        string homeownerId,
+        string clientId,
         Money serviceRevenue,
         TimeSpan responseTime,
         bool requiresIoTCertification)
@@ -64,11 +64,11 @@ public class TechnicianMetrics : BaseAggregateRoot
         _totalResponseTimeTicks += responseTime.Ticks;
         AverageResponseTime = new TimeSpan(_totalResponseTimeTicks / CompletedServicesCount);
 
-        if (_servedHomeownerIds.Contains(homeownerId))
+        if (_servedClientIds.Contains(clientId))
             _returningClientCount++;
-        _servedHomeownerIds.Add(homeownerId);
-        ClientRetentionRate = _servedHomeownerIds.Count > 0
-            ? (decimal)_returningClientCount / _servedHomeownerIds.Count
+        _servedClientIds.Add(clientId);
+        ClientRetentionRate = _servedClientIds.Count > 0
+            ? (decimal)_returningClientCount / _servedClientIds.Count
             : 0;
 
         LastCalculatedAt = DateTime.UtcNow;

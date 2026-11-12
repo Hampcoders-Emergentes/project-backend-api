@@ -7,7 +7,7 @@ using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
-using Swashbuckle.AspNetCore.Annotations;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 
@@ -15,7 +15,7 @@ namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 [Route("api/v1/homeowners/{ownerId}/[controller]")]
 [Route("api/v1/companies/{ownerId}/[controller]")]
 [Produces(MediaTypeNames.Application.Json)]
-[SwaggerTag("Property Portfolio Endpoints")]
+[ApiDocTag("Property Portfolio Endpoints")]
 // M3.23: the route owner must be the authenticated actor's own HomeOwner/Company subject (PropertyOwnerRoute);
 // a property of another owner, or a missing portfolio/property/entry, is a generic 404.
 public class PropertyPortfoliosController(
@@ -25,9 +25,9 @@ public class PropertyPortfoliosController(
 {
     /// <summary>Retorna el portfolio del homeowner</summary>
     [HttpGet]
-    [SwaggerOperation(Summary = "Get portfolio by owner ID", OperationId = "GetPortfolioByOwnerId")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Portfolio found", typeof(PropertyPortfolioResource))]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Portfolio not found")]
+    [ApiDocOperation(Summary = "Get portfolio by owner ID", OperationId = "GetPortfolioByOwnerId")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Portfolio found", typeof(PropertyPortfolioResource))]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Portfolio not found")]
     public async Task<IActionResult> GetPortfolio([FromRoute] string ownerId)
     {
         var (owner, denied) = await PropertyOwnerRoute.AuthorizeAsync(this, profiles, ownerId);
@@ -40,10 +40,10 @@ public class PropertyPortfoliosController(
 
     /// <summary>Agrega una propiedad al portfolio del homeowner</summary>
     [HttpPost("properties")]
-    [SwaggerOperation(Summary = "Add property to portfolio", OperationId = "AddPropertyToPortfolio")]
-    [SwaggerResponse(StatusCodes.Status200OK, "Property added to portfolio", typeof(PropertyPortfolioResource))]
-    [SwaggerResponse(StatusCodes.Status409Conflict, "Property already in portfolio or nickname in use")]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Portfolio or property not found")]
+    [ApiDocOperation(Summary = "Add property to portfolio", OperationId = "AddPropertyToPortfolio")]
+    [ApiDocResponse(StatusCodes.Status200OK, "Property added to portfolio", typeof(PropertyPortfolioResource))]
+    [ApiDocResponse(StatusCodes.Status409Conflict, "Property already in portfolio or nickname in use")]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Portfolio or property not found")]
     public async Task<IActionResult> AddPropertyToPortfolio(
         [FromRoute] string ownerId,
         [FromBody] AddPropertyToPortfolioResource resource)
@@ -72,9 +72,9 @@ public class PropertyPortfoliosController(
 
     /// <summary>Elimina una propiedad del portfolio del homeowner</summary>
     [HttpDelete("properties/{propertyId}")]
-    [SwaggerOperation(Summary = "Remove property from portfolio", OperationId = "RemovePropertyFromPortfolio")]
-    [SwaggerResponse(StatusCodes.Status204NoContent, "Property removed from portfolio")]
-    [SwaggerResponse(StatusCodes.Status404NotFound, "Portfolio or property not found")]
+    [ApiDocOperation(Summary = "Remove property from portfolio", OperationId = "RemovePropertyFromPortfolio")]
+    [ApiDocResponse(StatusCodes.Status204NoContent, "Property removed from portfolio")]
+    [ApiDocResponse(StatusCodes.Status404NotFound, "Portfolio or property not found")]
     public async Task<IActionResult> RemovePropertyFromPortfolio(
         [FromRoute] string ownerId,
         [FromRoute] string propertyId,
