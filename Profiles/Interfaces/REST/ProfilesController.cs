@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Tokens.Claims;
 using System.Net.Mime;
 using Hampcoders.Electrolink.API.Profiles.Domain.Model.Commands;
 using Hampcoders.Electrolink.API.Profiles.Domain.Model.Queries;
@@ -35,6 +36,7 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/complete/technician
     [HttpPost("me/complete/technician")]
+    [RefreshesAccessToken]
     [ApiDocOperation(Summary = "Complete profile as technician", OperationId = "CompleteAsTechnician")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status201Created)]
     public async Task<IActionResult> CompleteAsTechnician(
@@ -49,6 +51,7 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/complete/homeowner
     [HttpPost("me/complete/homeowner")]
+    [RefreshesAccessToken]
     [ApiDocOperation(Summary = "Complete profile as homeowner", OperationId = "CompleteAsHomeowner")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status201Created)]
     public async Task<IActionResult> CompleteAsHomeowner(
@@ -63,6 +66,7 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/complete/company
     [HttpPost("me/complete/company")]
+    [RefreshesAccessToken]
     [ApiDocOperation(Summary = "Complete profile as company", OperationId = "CompleteAsCompany")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status201Created)]
     public async Task<IActionResult> CompleteAsCompany(
@@ -154,6 +158,7 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/deactivate
     [HttpPost("me/deactivate")]
+    [RefreshesAccessToken]
     [ApiDocOperation(Summary = "Deactivate profile", OperationId = "DeactivateProfile")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> DeactivateProfile(
@@ -172,6 +177,7 @@ public class ProfilesController(
 
     // POST api/v1/profiles/me/reactivate
     [HttpPost("me/reactivate")]
+    [RefreshesAccessToken]
     [ApiDocOperation(Summary = "Reactivate profile", OperationId = "ReactivateProfile")]
     [ProducesResponseType(typeof(MyProfileResource), StatusCodes.Status200OK)]
     public async Task<IActionResult> ReactivateProfile()

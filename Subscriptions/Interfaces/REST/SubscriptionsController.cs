@@ -6,6 +6,7 @@ using Hampcoders.Electrolink.API.Subscriptions.Domain.Services;
 using Hampcoders.Electrolink.API.Subscriptions.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Subscriptions.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.Subscriptions.Interfaces.REST.Transform;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Tokens.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -90,6 +91,7 @@ public class SubscriptionsController(
 
     [HttpPost("me/cancel")]
     [Authorize]
+    [RefreshesAccessToken]
     public async Task<IActionResult> CancelSubscription([FromBody] CancelSubscriptionResource resource)
     {
         var (profileId, denied) = await ResolveProfileAsync();
