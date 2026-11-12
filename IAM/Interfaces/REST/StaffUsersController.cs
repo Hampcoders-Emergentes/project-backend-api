@@ -5,6 +5,7 @@ using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Resources;
 using Hampcoders.Electrolink.API.IAM.Interfaces.REST.Transform;
 using Microsoft.AspNetCore.Mvc;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Idempotency;
 
 namespace Hampcoders.Electrolink.API.IAM.Interfaces.REST;
 
@@ -17,6 +18,7 @@ public class StaffUsersController(IStaffUserCommandService staffUserCommandServi
 {
     [HttpPost]
     [RequireAccessRole(Domain.Model.ValueObjects.AccessRole.Admin, Domain.Model.ValueObjects.AccessRole.SuperAdmin)]
+    [IdempotentEndpoint]
     [ApiDocOperation(
         Summary = "Create a staff user",
         Description = "Creates a staff user (Maker, Admin, FieldManager). Only accessible by Admin/SuperAdmin.",
@@ -31,7 +33,8 @@ public class StaffUsersController(IStaffUserCommandService staffUserCommandServi
             var command = CreateStaffUserCommandFromResourceAssembler.ToCommandFromResource(resource);
             var userId = await staffUserCommandService.Handle(command);
             var responseResource = new StaffUserResource(userId, resource.Email, resource.AccessRole);
-            return CreatedAtAction(nameof(CreateStaffUser), responseResource);
+            // The account is readable at GET /api/v1/users/{id} (Admin/SuperAdmin may read any account).
+            return Created($"/api/v1/users/{userId}", responseResource);
         }
         catch (Exception ex)
         {

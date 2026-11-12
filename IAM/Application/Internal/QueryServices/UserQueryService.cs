@@ -40,6 +40,8 @@ public class UserQueryService(IUserRepository userRepository) : IUserQueryServic
         return await userRepository.ListAsync(query.Page, query.PageSize);
     }
 
+    public Task<int> Handle(GetUsersCountQuery query) => userRepository.CountAsync();
+
     /**
      * <summary>
      *     Handle get user by email query

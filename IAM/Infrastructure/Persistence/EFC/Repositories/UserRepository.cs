@@ -50,6 +50,8 @@ public class UserRepository(AppDbContext context) : BaseRepository<User, UserId>
             .ToListAsync();
     }
 
+    public Task<int> CountAsync() => Context.Set<User>().CountAsync();
+
     public async Task<User?> FindByPasswordResetTokenAsync(string resetTokenHash)
     {
         return await Context.Set<User>()
