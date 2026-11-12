@@ -8,6 +8,7 @@ using Hampcoders.Electrolink.API.Assets.Interfaces.REST.Transform;
 using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Microsoft.AspNetCore.Mvc;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 
 namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 
@@ -38,7 +39,8 @@ public class ComponentTypesController(
             var componentType = await componentTypeCommandService.Handle(command);
             if (componentType is null) return BadRequest();
 
-            return Ok(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType));
+            var created = ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity(componentType);
+            return CreatedAtRoute(nameof(GetComponentTypeById), new { technicianId, typeId = componentType.Id.Value }, created);
         }
         catch (DuplicateAssetException ex) { return Conflict(new { message = ex.Message }); }
     }
@@ -62,15 +64,14 @@ public class ComponentTypesController(
 
     [HttpGet]
     [ApiDocOperation(Summary = "Get All Component Types", OperationId = "GetAllComponentTypes")]
-    [ApiDocResponse(StatusCodes.Status200OK, "List of component types retrieved", typeof(IEnumerable<ComponentTypeResource>))]
-    public async Task<IActionResult> GetAllComponentTypes([FromRoute] string technicianId)  
+    [ApiDocResponse(StatusCodes.Status200OK, "List of component types retrieved", typeof(PagedResponse<ComponentTypeResource>))]
+    public async Task<IActionResult> GetAllComponentTypes([FromRoute] string technicianId, [FromQuery] PageRequest paging)
     {
         var denied = await ComponentCatalogAccess.AuthorizeReadAsync(this, profiles, technicianId);
         if (denied is not null) return denied;
         var query = new GetAllComponentTypesQuery();
         var componentTypes = await componentTypeQueryService.Handle(query);
-        var resources = componentTypes.Select(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity);
-        return Ok(resources);
+        return Ok(PagedResponse.From(componentTypes.Select(ComponentTypeResourceFromEntityAssembler.ToResourceFromEntity), paging));
     }
 
     [HttpPut("{typeId}")]

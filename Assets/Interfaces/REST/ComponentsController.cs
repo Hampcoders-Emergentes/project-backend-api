@@ -8,6 +8,7 @@ using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 
 namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 
@@ -38,7 +39,8 @@ public class ComponentsController(
             var component = await componentCommandService.Handle(command);
             if (component is null) return BadRequest();
 
-            return Ok(ComponentResourceFromEntityAssembler.ToResourceFromEntity(component));
+            var created = ComponentResourceFromEntityAssembler.ToResourceFromEntity(component);
+            return CreatedAtRoute(nameof(GetComponentById), new { technicianId, componentId = component.Id.Value }, created);
         }
         catch (DuplicateAssetException ex) { return Conflict(new { message = ex.Message }); }
     }
@@ -62,15 +64,14 @@ public class ComponentsController(
 
     [HttpGet]
     [ApiDocOperation(Summary = "Get All Components", OperationId = "GetAllComponents")]
-    [ApiDocResponse(StatusCodes.Status200OK, "List of components retrieved", typeof(IEnumerable<ComponentResource>))]
-    public async Task<IActionResult> GetAllComponents([FromRoute] string technicianId)  
+    [ApiDocResponse(StatusCodes.Status200OK, "List of components retrieved", typeof(PagedResponse<ComponentResource>))]
+    public async Task<IActionResult> GetAllComponents([FromRoute] string technicianId, [FromQuery] PageRequest paging)
     {
         var denied = await ComponentCatalogAccess.AuthorizeReadAsync(this, profiles, technicianId);
         if (denied is not null) return denied;
         var query = new GetAllComponentsQuery();
         var components = await componentQueryService.Handle(query);
-        var resources = components.Select(ComponentResourceFromEntityAssembler.ToResourceFromEntity);
-        return Ok(resources);
+        return Ok(PagedResponse.From(components.Select(ComponentResourceFromEntityAssembler.ToResourceFromEntity), paging));
     }
 
     [HttpPut("{componentId}")]

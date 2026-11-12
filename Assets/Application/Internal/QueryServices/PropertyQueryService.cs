@@ -29,12 +29,8 @@ public class PropertyQueryService(IPropertyRepository propertyRepository) : IPro
     /// Maneja la consulta para obtener todas las propiedades de un propietario,
     /// aplicando los filtros opcionales de búsqueda.
     /// </summary>
-    public async Task<IEnumerable<Property>> Handle(GetAllPropertiesByOwnerIdQuery query)
-    {
-        var (items, _) = await propertyRepository.GetAllFilteredPaginatedAsync(
-            query.Owner, query.City, query.Street, query.Page, query.PageSize);
-        return items;
-    }
+    public Task<(IEnumerable<Property> Items, int TotalCount)> Handle(GetAllPropertiesByOwnerIdQuery query) =>
+        propertyRepository.GetAllFilteredPaginatedAsync(query.Owner, query.City, query.Street, query.Page, query.PageSize);
     
     public async Task<Address?> Handle(GetPropertyAddressQuery query)
     {

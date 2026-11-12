@@ -9,6 +9,7 @@ using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 
 namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 
@@ -196,8 +197,8 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
 
     [HttpGet("stock-items")]
     [ApiDocOperation(Summary = "Get Technician Inventory Stock Items", OperationId = "GetTechnicianInventoryStockItems")]
-    [ApiDocResponse(StatusCodes.Status200OK, "The list of stock items with component details", typeof(IEnumerable<ComponentStockResource>))]
-    public async Task<IActionResult> GetInventoryItems([FromRoute] string technicianId)
+    [ApiDocResponse(StatusCodes.Status200OK, "The list of stock items with component details", typeof(PagedResponse<ComponentStockResource>))]
+    public async Task<IActionResult> GetInventoryItems([FromRoute] string technicianId, [FromQuery] PageRequest paging)
     {
         var (technician, denied) = await TechnicianRoute.AuthorizeAsync(this, profiles, technicianId);
         if (denied is not null) return denied;
@@ -214,7 +215,7 @@ public class TechnicianInventoriesController(ITechnicianInventoryCommandService 
             item.LastUpdated
         ));
 
-        return Ok(resources);
+        return Ok(PagedResponse.From(resources, paging));
     }
     
     private async Task<TechnicianInventoryResource> BuildResponseAsync(string technicianId)

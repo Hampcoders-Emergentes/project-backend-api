@@ -9,6 +9,7 @@ public interface IPropertyQueryService
 {
     Task<Property?> Handle(GetPropertyByIdQuery query);
     Task<Property?> Handle(GetPropertyByHomeownerIdAndIdQuery query);
-    Task<IEnumerable<Property>> Handle(GetAllPropertiesByOwnerIdQuery query);
+    /// <returns>The requested page and the total number of matching properties.</returns>
+    Task<(IEnumerable<Property> Items, int TotalCount)> Handle(GetAllPropertiesByOwnerIdQuery query);
     Task<Address?> Handle(GetPropertyAddressQuery query);
 }

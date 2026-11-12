@@ -8,6 +8,7 @@ using Hampcoders.Electrolink.API.Profiles.Interfaces.ACL;
 using Hampcoders.Electrolink.API.Shared.Domain.Model.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST.Resources;
 
 namespace Hampcoders.Electrolink.API.Assets.Interfaces.REST;
 
@@ -35,18 +36,19 @@ public class PropertiesController(
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<PropertyResource>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<PropertyResource>>> GetAll(
+    [ProducesResponseType(typeof(PagedResponse<PropertyResource>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResponse<PropertyResource>>> GetAll(
         [FromRoute] string ownerId,
         [FromQuery] string? city, [FromQuery] string? district,
         [FromQuery] string? region, [FromQuery] string? street,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        [FromQuery] PageRequest paging)
     {
         var (owner, denied) = await AuthorizeOwnerAsync(ownerId);
         if (denied is not null) return denied;
-        var results = await queryService.Handle(
-            new GetAllPropertiesByOwnerIdQuery(owner!, city, street, page, pageSize));
-        return Ok(results.Select(PropertyResourceFromEntityAssembler.ToResourceFromEntity));
+        var (items, total) = await queryService.Handle(
+            new GetAllPropertiesByOwnerIdQuery(owner!, city, street, paging.Page, paging.PageSize));
+        return Ok(PagedResponse<PropertyResource>.Create(
+            items.Select(PropertyResourceFromEntityAssembler.ToResourceFromEntity).ToList(), paging, total));
     }
 
     /// <summary>Crea una propiedad para un homeowner</summary>
@@ -64,7 +66,8 @@ public class PropertiesController(
             var property = await commandService.Handle(command);
             if (property is null) return BadRequest();
             var response = PropertyResourceFromEntityAssembler.ToResourceFromEntity(property);
-            return Ok(response);
+            // Same owner route the request used (homeowners/... or companies/...).
+            return Created($"{Request.Path.Value?.TrimEnd('/')}/{response.PropertyId}", response);
         }
         catch (ArgumentException ex)
         {
