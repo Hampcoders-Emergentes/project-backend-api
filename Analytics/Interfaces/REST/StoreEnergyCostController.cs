@@ -1,3 +1,5 @@
+using Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions;
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.ComponentModel.DataAnnotations;
 using System.Net.Mime;
 using System.Text.Json.Serialization;
@@ -8,6 +10,7 @@ using Hampcoders.Electrolink.API.Analytics.Domain.Model.Enums;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.Aggregates;
 using Hampcoders.Electrolink.API.Shared.Application.Time;
 using Microsoft.AspNetCore.Mvc;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Concurrency;
 using HumanAuthorize = Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AuthorizeAttribute;
 namespace Hampcoders.Electrolink.API.Analytics.Interfaces.REST;
 
@@ -44,9 +47,14 @@ public sealed class StoreEnergyCostController(EnergyCostQueryService costs, Ener
     /// <summary>Generates an energy efficiency report (csv or pdf) and returns its download metadata.</summary>
     [HttpPost("analytics/reports"), Produces(MediaTypeNames.Application.Json)]
     [ProducesResponseType(typeof(EnergyReportResource), StatusCodes.Status201Created)]
-    public async Task<ActionResult<EnergyReportResource>> Generate(string storeId, GenerateEnergyReportResource body)
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<EnergyReportResource>> Generate(string storeId, GenerateEnergyReportResource body,
+        [FromServices] ReportGenerationGuard guard)
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
+        using var lease = guard.TryBegin("energy-report", actor.Id.Value, storeId);
+        if (lease == null)
+            return Conflict(ErrorBodies.Coded("A report for this store is already being generated. Retry when it finishes.", ErrorCodes.ReportInProgress));
         try
         {
             var interval = ExplicitUtcInterval.Parse(body.From, body.To);
@@ -57,7 +65,7 @@ public sealed class StoreEnergyCostController(EnergyCostQueryService costs, Ener
                 Url.Action(nameof(Download), new { storeId, reportId = meta.ReportId }) ?? $"/api/v1/stores/{storeId}/analytics/reports/{meta.ReportId}/download");
             return CreatedAtAction(nameof(Download), new { storeId, reportId = meta.ReportId }, resource);
         }
-        catch (StoreNotAccessibleException) { return NotFound(new { message = "Resource not found." }); }
+        catch (StoreNotAccessibleException) { return NotFound(ErrorBodies.Coded("Resource not found.", ErrorCodes.StoreNotFound)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 
@@ -83,7 +91,7 @@ public sealed class StoreEnergyCostController(EnergyCostQueryService costs, Ener
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try { return Ok(await action(actor)); }
-        catch (StoreNotAccessibleException) { return NotFound(new { message = "Resource not found." }); }
+        catch (StoreNotAccessibleException) { return NotFound(ErrorBodies.Coded("Resource not found.", ErrorCodes.StoreNotFound)); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
 }

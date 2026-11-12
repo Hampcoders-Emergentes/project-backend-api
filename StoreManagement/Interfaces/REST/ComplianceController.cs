@@ -1,3 +1,4 @@
+using Hampcoders.Electrolink.API.Shared.Interfaces.REST;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using Hampcoders.Electrolink.API.StoreManagement.Application;
@@ -136,14 +137,22 @@ public sealed class ComplianceController(ComplianceRecordsService records, Compl
             Response.Headers.ETag = $"\"{hash}\"";
             return File(png, "image/png");
         }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
     }
 
     /// <summary>Generates the official OHS dossier (PDF) for a period of up to 366 days (default: last 90 days).</summary>
     [HttpPost("compliance/reports/generate")]
     [ProducesResponseType(typeof(OhsReportResource), StatusCodes.Status201Created)]
-    public Task<ActionResult<OhsReportResource>> Generate(string storeId, GenerateOhsReportResource? body) =>
-        Execute(async actor =>
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<OhsReportResource>> Generate(string storeId, GenerateOhsReportResource? body,
+        [FromServices] Hampcoders.Electrolink.API.Shared.Infrastructure.Concurrency.ReportGenerationGuard guard)
+    {
+        if (HttpContext.Items["User"] is not User caller) return Unauthorized();
+        using var lease = guard.TryBegin("ohs-report", caller.Id.Value, storeId);
+        if (lease == null)
+            return Conflict(ErrorBodies.Coded("A report for this store is already being generated. Retry when it finishes.",
+                Hampcoders.Electrolink.API.Shared.Domain.Model.Exceptions.ErrorCodes.ReportInProgress));
+        return await Execute(async actor =>
         {
             var now = DateTime.UtcNow;
             var interval = body?.From == null && body?.To == null
@@ -152,6 +161,7 @@ public sealed class ComplianceController(ComplianceRecordsService records, Compl
             return Resource(storeId, await assessment.Handle(new GenerateOhsReportCommand(actor.Id, storeId, interval.FromUtc, interval.ToUtc),
                 HttpContext.RequestAborted));
         }, value => Created(value.DownloadUrl, value));
+    }
 
     /// <summary>Dossiers generated for the store, newest first.</summary>
     [HttpGet("compliance/reports")]
@@ -171,7 +181,7 @@ public sealed class ComplianceController(ComplianceRecordsService records, Compl
             Response.Headers.CacheControl = "private, no-store";
             return File(report.Content, report.ContentType, report.FileName);
         }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
     }
 
     private static OhsReportResource Resource(string storeId, OhsReportMetadata m) => new(m.ReportId, m.StoreId, m.FileName, m.ContentType,
@@ -182,7 +192,7 @@ public sealed class ComplianceController(ComplianceRecordsService records, Compl
     {
         if (HttpContext.Items["User"] is not User actor) return Unauthorized();
         try { var value = await action(actor); return created != null ? created(value) : Ok(value); }
-        catch (HierarchyNotFoundException) { return NotFound(new { message = "Resource not found." }); }
+        catch (HierarchyNotFoundException notFound) { return NotFound(ErrorBodies.Coded("Resource not found.", notFound.ErrorCode)); }
         catch (ComplianceConflictException e) { return Conflict(new { message = e.Message }); }
         catch (ArgumentException e) { return BadRequest(new { message = e.Message }); }
     }
