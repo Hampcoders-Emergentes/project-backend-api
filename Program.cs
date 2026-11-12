@@ -28,6 +28,10 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Hampcoders.Electrolink.API.StoreManagement.Infrastructure.Configuration;
 using Hampcoders.Electrolink.API.Shared.Infrastructure.Email;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Auditing;
+using System.Text.Json.Serialization;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.ErrorHandling;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.Idempotency;
+using Hampcoders.Electrolink.API.IAM.Infrastructure.Tokens.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,8 +40,17 @@ builder.Services.AddControllers(options => options.Conventions.Add(new KebabCase
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new ESpecialtyJsonConverter());
+        // Every enum crosses the wire by its member name (requests still accept the numeric value).
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
+// Same enum policy for JSON written outside MVC (minimal endpoints, Results.Json).
+builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// One RFC 7807 error envelope for every status code (exceptions, MVC results, status code pages, IAM middleware, JWT).
+builder.Services.AddUnifiedErrorHandling();
+// Idempotency-Key support for creation endpoints marked [IdempotentEndpoint].
+builder.Services.AddIdempotentEndpoints();
 
 NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
 
@@ -75,7 +88,9 @@ if (allowedOrigins.Contains("*"))
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(FrontendCorsPolicy, policy =>
-        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials());
+        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()
+            // Response headers the SPA must be able to read.
+            .WithExposedHeaders("Location", RefreshedTokenHeader.Name, IdempotencyHeaders.Replayed));
 });
 
 // Shared
@@ -120,7 +135,23 @@ builder.Services.AddAuthentication(options =>
 
         // Same parameters as the IAM middleware: issuer, audience, lifetime and signature, zero clock skew.
         options.TokenValidationParameters = tokenSettings.CreateValidationParameters();
+
+        // Browsers cannot set headers on WebSocket/SSE upgrades: SignalR sends the JWT as ?access_token=.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken) && context.HttpContext.Request.Path.StartsWithSegments("/hubs/alerts"))
+                    context.Token = accessToken;
+                return Task.CompletedTask;
+            }
+        }.WithProblemDetailsResponses();
     });
+
+// Profile/role claims are re-read from current state on each request, so a token issued before a profile completion,
+// role change or tier change does not keep failing (stale-claims 401/403).
+builder.Services.AddCurrentClaimsRefresh();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -168,6 +199,7 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 }
 
 // Middleware
+app.UseUnifiedErrorHandling();
 app.UseForwardedHeaders();
 app.UseCors(FrontendCorsPolicy);
 
@@ -185,6 +217,8 @@ app.UseAuthorization();
 // Endpoint rate limits (public demo request form).
 app.UseRateLimiter();
 app.MapControllers();
+// Real-time alerts/store events (CORS policy FrontendPolicy is applied globally by UseCors above).
+app.MapHub<Hampcoders.Electrolink.API.AlertManagement.Infrastructure.Realtime.AlertsHub>("/hubs/alerts");
 // RequestAuthorizationMiddleware only honours the IAM attribute, so the docs endpoints are marked with it.
 var anonymousDocs = new Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes.AllowAnonymousAttribute();
 app.MapOpenApi().WithMetadata(anonymousDocs);
