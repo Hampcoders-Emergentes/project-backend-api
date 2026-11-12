@@ -62,6 +62,9 @@ public static class WebApplicationBuilderExtensions
         services.AddHttpClient(WebhookAlertChannel.ClientName)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
         services.AddScoped<IExternalAlertChannel, WebhookAlertChannel>();
+        // GET /api/v1/notification-channels: DELIVERED vs LOG_ONLY per channel, derived from the registrations above.
+        services.AddScoped<INotificationChannelReadinessPort, NotificationChannelReadinessAdapter>();
+        services.AddScoped<NotificationChannelReadinessQueryService>();
         services.AddHostedService<AlertDispatchWorker>();
         services.AddScoped<IOnDutyWorkerPort, OnDutyWorkerAdapter>();
         services.AddScoped<Hampcoders.Electrolink.API.AlertManagement.Interfaces.ACL.IStoreAlertHistoryFacade,
