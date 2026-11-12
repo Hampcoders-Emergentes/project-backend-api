@@ -12,9 +12,14 @@ using Hampcoders.Electrolink.API.Shared.Infrastructure.OpenApi;
 
 namespace Hampcoders.Electrolink.API.IAM.Interfaces.REST;
 
+/// <summary>
+///     Authentication, session refresh and password recovery. Canonical prefix: <c>/api/v1/auth</c>.
+///     <see cref="LegacyAuthenticationController"/> keeps the former <c>/api/v1/authentication/*</c> routes working
+///     (hidden from the OpenAPI document).
+/// </summary>
 [Authorize]
 [ApiController]
-[Route("api/v1/[controller]")]
+[Route("api/v1/auth")]
 [Produces(MediaTypeNames.Application.Json)]
 [ApiDocTag("Available Authentication endpoints")]
 public class AuthenticationController(IUserCommandService userCommandService, ILogger<AuthenticationController> logger) : ControllerBase
@@ -196,3 +201,9 @@ public class AuthenticationController(IUserCommandService userCommandService, IL
         }
     }
 }
+
+/// <summary>Backward-compatible alias of <see cref="AuthenticationController"/> under /api/v1/authentication. Do not use in new clients.</summary>
+[Route("api/v1/authentication")]
+[ApiExplorerSettings(IgnoreApi = true)]
+public sealed class LegacyAuthenticationController(IUserCommandService userCommandService, ILogger<AuthenticationController> logger)
+    : AuthenticationController(userCommandService, logger);
