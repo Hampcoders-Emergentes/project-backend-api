@@ -3,6 +3,7 @@ using Hampcoders.Electrolink.API.IAM.Domain.Model.Queries;
 using Hampcoders.Electrolink.API.IAM.Domain.Model.ValueObjects;
 using Hampcoders.Electrolink.API.IAM.Domain.Services;
 using Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Attributes;
+using Hampcoders.Electrolink.API.Shared.Infrastructure.Interfaces.ASP.ErrorHandling;
 
 namespace Hampcoders.Electrolink.API.IAM.Infrastructure.Pipeline.Middleware.Components;
 
@@ -45,8 +46,7 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
 
         if (string.IsNullOrEmpty(token))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsync("Unauthorized: Missing token");
+            await ApiProblemDetails.WriteAsync(context, StatusCodes.Status401Unauthorized, "A valid access token is required.");
             return;
         }
 
@@ -54,8 +54,7 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
 
         if (string.IsNullOrEmpty(userId))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsync("Unauthorized: Invalid token");
+            await ApiProblemDetails.WriteAsync(context, StatusCodes.Status401Unauthorized, "The access token is invalid or has expired.");
             return;
         }
 
@@ -63,16 +62,14 @@ public class RequestAuthorizationMiddleware(RequestDelegate next)
 
         if (user == null)
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsync("Unauthorized: User not found");
+            await ApiProblemDetails.WriteAsync(context, StatusCodes.Status401Unauthorized, "The account of this access token no longer exists.");
             return;
         }
 
         // M3.27: a valid token does not keep a Suspended/PendingVerification account usable.
         if (user.Status != EUserStatus.Active)
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await context.Response.WriteAsync("Forbidden: Account is not active");
+            await ApiProblemDetails.WriteAsync(context, StatusCodes.Status403Forbidden, "The account is not active.");
             return;
         }
 
