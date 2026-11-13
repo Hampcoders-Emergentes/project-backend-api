@@ -5,7 +5,7 @@ VisualStudioVersion = 18.11.12328.437 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Hampcoders.Electrolink.API", "..\Hampcoders.Electrolink.API.csproj", "{C91106B7-352A-499C-8323-CC2898EEA405}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Electrolink.Backend.Characterization.Tests", "Electrolink.Backend.Characterization.Tests\Electrolink.Backend.Characterization.Tests.csproj", "{32BE9CFA-1071-4F8A-B866-01C21940BEB6}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Electrolink.Backend.UnitTests", "Electrolink.Backend.UnitTests\Electrolink.Backend.UnitTests.csproj", "{32BE9CFA-1071-4F8A-B866-01C21940BEB6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
